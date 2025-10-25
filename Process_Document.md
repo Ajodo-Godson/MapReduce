@@ -47,3 +47,7 @@ I'm starting off with defining the proto file.
 What's Proto? 
 It's a mechanism for serializing structured data. Very similar to XML or JSON but smaller and faster. 
 Data serialization is the process of converting complex data structures into a format that can be easily transmitted over a network or stored in a file. 
+For communication among the machines, we use gRPC which enables a client application to directly call a method on a server application on a different machine as if it were a local object.
+gRPC uses Proto(col Buffers) for serializing structured data. 
+Read more on grpc: https://grpc.io/docs/what-is-grpc/introduction/ 
+

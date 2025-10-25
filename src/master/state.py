@@ -42,42 +42,115 @@ class MasterState:
                 
     def get_worker(self, worker_id):
         """Retrieves information about a specific worker."""
+        with self.lock: 
+            return self.workers.get(worker_id, {}).copy()
 
-        pass
-       
     def get_all_workers(self):
         """Retrieves information about all workers."""
-        pass
+        with self.lock: 
+            return {
+                wid: {
+                    'status': info['status'],
+                    'last_heartbeat': time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(info['last_heartbeat'])),
+                    'tasks_completed': info.get('tasks_completed', 0),
+                    'tasks_failed': info.get('tasks_failed', 0)
+                }
+                for wid, info in self.workers.items()
+            }
+        
 
     def add_task(self, task_id, task_info):
         """Adds a new task to the master."""
-        pass
+        with self.lock:
+            self.tasks[task_id] = {
+                **task_info, 
+                'status': 'pending', # pending, running, completed, failed
+                'assigned_worker': None,
+                'created_at': time.time(), 
+                'started_at': None,
+                'completed_at': None,
+                'attempts': 0
+            }
+        
 
-    def assign_task(self, worker_id):
+    def assign_task(self, task_id, worker_id):
         """Assigns an idle task to a worker."""
-        pass
+        with self.lock:
+            if task_id in self.tasks and worker_id in self.workers:
+                task = self.tasks[task_id]
+                if task['status'] == 'pending':
+                    task['assigned_worker'] = worker_id
+                    task['status'] = 'running'
+                    task['started_at'] = time.time()
+                    task['attempts'] += 1
+                    self.workers[worker_id]['tasks_assigned'] += 1 # Consistency in ACID here. If we're assining a task, we should increment the assigned count.
 
-    def complete_task(self, worker_id, task_id, success):
+
+    def complete_task(self, task_id, output_data):
         """Marks a task as complete or failed."""
-        pass
+        with self.lock: 
+            if task_id in self.tasks:
+                task = self.tasks[task_id]
+                worker_id = task['assigned_worker']
+                if task['status'] == 'running':
+                    task['completed_at'] = time.time()
+                    task['status'] = 'completed'
+                    task['output_data'] = output_data
+                    if worker_id and worker_id in self.workers:
+                        self.workers[worker_id]['tasks_completed'] += 1
+                else: 
+                    # if task was not running, we can thrown an error so that it restarts, but we can enforce that by still marking it as failed
+                    task['completed_at'] = time.time()
+                    task['status'] = 'failed'
+                    if worker_id and worker_id in self.workers:
+                        self.workers[worker_id]['tasks_failed'] += 1
 
     def fail_task(self, task_id):
-        """Marks a task as failed."""
-        pass
+        """Marks a task as failed and reset for retry."""
+        with self.lock:
+            if task_id in self.tasks:
+                task = self.tasks[task_id]
+                worker_id = task['assigned_worker']
+
+                # Update worker stats
+                if worker_id and worker_id in self.workers:
+                    self.workers[worker_id]['tasks_failed'] += 1
+
+                # Reset for potential retry
+                if task['status'] == 'running' and task['attempts'] < 3:  # max 3 attempts
+                    task['status'] = 'pending'
+                    task['assigned_worker'] = None
 
     def get_task(self, task_id):
         """Retrieves information about a specific task."""
-        pass
+        with self.lock:
+            return self.tasks.get(task_id, {}).copy()
 
     def get_all_tasks(self):
         """Retrieves information about all tasks."""
-        pass
+        with self.lock:
+            return self.tasks.copy()
 
     def get_pending_tasks(self):
         """Retrieves all pending tasks."""
-        pass
+        with self.lock:
+            return [
+                (tid, task) for tid, task in self.tasks.items() if task['status'] == 'pending'
+            ]
 
     def reassign_worker_tasks(self, worker_id):
         """Reassigns all tasks from a failed worker."""
-        pass
-    
+        with self.lock:
+            reassigned_tasks = []
+
+            for task_id, task in self.tasks.items():
+                if task['assigned_worker'] == worker_id and task['status'] == 'running':
+                    task['status'] = 'pending'
+                    task['assigned_worker'] = None  
+                    reassigned_tasks.append(task_id)
+                    
+                    self.workers[worker_id]['tasks_assigned'] -= 1
+            if reassigned_tasks:
+                print(f"Reassigned tasks {reassigned_tasks} from failed worker {worker_id}")
+
+            return reassigned_tasks
