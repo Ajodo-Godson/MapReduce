@@ -12,3 +12,12 @@ Map --> (k1, v1) ----> list(k2, v2)
 Reduce --> (k2, list(v2)) --> list(v2)
 
 Definitely, our Input KV will be different from the output KVs. So we have to do those conversions. 
+
+Some examples of ezpressable MapReduce computations: 
+- Disributed Grep: MAP emits a line if it matches a supplied pattern. REDUCE (Identity function)  copies the intermediate data to the output
+- Count of URL Access Frequency : MAP processes web page requess log and outputs {URL, 1}. REDUCE adds all values for the same URL and emits {URL, total count} pair. Similar to word count
+- Reverse Web-Link Graph: MAP outputs <target, source> pris for each link to target-URL found in a page named source. REDUCE concatentes the list of all source URLs associated with the given target URL and emits the pair <target, list(source)> 
+    and others like: 
+- Term-Vector per Host
+- Inverted Index
+- Distributed Sort
