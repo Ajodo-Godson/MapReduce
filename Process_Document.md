@@ -21,3 +21,6 @@ Some examples of ezpressable MapReduce computations:
 - Term-Vector per Host
 - Inverted Index
 - Distributed Sort
+
+## Implementation Approach
+This typically depends on the environment. My focus environment is a collection of networked machines. Other environments could be for a single shared memory or large NUMA multi-processor. Since I don't have too many machines (as in the literal sense), I would spin up multiple docker clusters to simulate the multiple machines for the distributed network. Each worker process can run on a different machine, and the gRPC framework will handle the network communication for task assignment and the "shuffle" phase. So we gain both parallelism and scalability. 
