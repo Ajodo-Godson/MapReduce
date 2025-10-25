@@ -40,7 +40,6 @@ class MasterState:
                         task['status'] = 'idle'
                         task['assigned_worker'] = None
                 
-    # Other methods: 
     def get_worker(self, worker_id):
         """Retrieves information about a specific worker."""
 
