@@ -40,3 +40,45 @@ class MasterState:
                         task['status'] = 'idle'
                         task['assigned_worker'] = None
                 
+    # Other methods: 
+    def get_worker(self, worker_id):
+        """Retrieves information about a specific worker."""
+
+        pass
+       
+    def get_all_workers(self):
+        """Retrieves information about all workers."""
+        pass
+
+    def add_task(self, task_id, task_info):
+        """Adds a new task to the master."""
+        pass
+
+    def assign_task(self, worker_id):
+        """Assigns an idle task to a worker."""
+        pass
+
+    def complete_task(self, worker_id, task_id, success):
+        """Marks a task as complete or failed."""
+        pass
+
+    def fail_task(self, task_id):
+        """Marks a task as failed."""
+        pass
+
+    def get_task(self, task_id):
+        """Retrieves information about a specific task."""
+        pass
+
+    def get_all_tasks(self):
+        """Retrieves information about all tasks."""
+        pass
+
+    def get_pending_tasks(self):
+        """Retrieves all pending tasks."""
+        pass
+
+    def reassign_worker_tasks(self, worker_id):
+        """Reassigns all tasks from a failed worker."""
+        pass
+    
