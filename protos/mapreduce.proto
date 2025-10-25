@@ -1,0 +1,59 @@
+syntax = "proto3";
+
+package mapreduce;
+
+// Master Service - Workers connect to this
+service MasterService {
+  rpc RegisterWorker(WorkerInfo) returns (RegisterResponse);
+  rpc SendHeartbeat(Heartbeat) returns (HeartbeatResponse);
+  rpc RequestTask(TaskRequest) returns (TaskAssignment);
+  rpc ReportTaskComplete(TaskResult) returns (TaskAck);
+}
+
+// Worker registration
+message WorkerInfo {
+  string worker_id = 1;
+  string host = 2;
+  int32 port = 3;
+}
+
+message RegisterResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+// Heartbeat messages
+message Heartbeat {
+  string worker_id = 1;
+  int64 timestamp = 2;
+  string status = 3;  // "idle", "busy"
+}
+
+message HeartbeatResponse {
+  bool acknowledged = 1;
+}
+
+// Task assignment
+message TaskRequest {
+  string worker_id = 1;
+}
+
+message TaskAssignment {
+  string task_id = 1;
+  string task_type = 2;  // "map" or "reduce"
+  string input_data = 3;  // For this milestone: simple string data
+  int32 partition_id = 4;
+  bool has_task = 5;  // False if no tasks available
+}
+
+message TaskResult {
+  string worker_id = 1;
+  string task_id = 2;
+  bool success = 3;
+  string output_data = 4;  // JSON-serialized results
+  string error_message = 5;
+}
+
+message TaskAck {
+  bool acknowledged = 1;
+}

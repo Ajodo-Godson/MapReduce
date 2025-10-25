@@ -40,3 +40,10 @@ For each MAP and REDUCE tasks, we store,
 - Master pings every worker periodically. if no response is received from a worker, the master marks the worker as failed. Map tasks completed/inprogress by the worker are reset back to their initial idle state and become eligible for scheudling on other workers. From the paper, we reset even completed tasks to idle cos outputs are stored on the local disks of the failed machine and inaccessible. 
 - Master write periodic checkpoints. If the master taks dies, a new copy can be started from the last checkpointed state. 
 A critique of how this was handled in the paper: the implmentation assumes a single master and the unlikeliness of a failure. If the worst case of a failure happens, the mapreduce computation aborts totally. A way I can go about this will be similar to the way Raft works, where we can hold elections and then re-elect a new leader/master from the candidates nodes/machines. 
+
+
+## PROGRESS
+I'm starting off with defining the proto file. 
+What's Proto? 
+It's a mechanism for serializing structured data. Very similar to XML or JSON but smaller and faster. 
+Data serialization is the process of converting complex data structures into a format that can be easily transmitted over a network or stored in a file. 
