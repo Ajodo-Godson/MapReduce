@@ -5,3 +5,10 @@ To-Know:
 - How proto files work
 - Workings of grpc
 - Workers and Client simulated processes and outputs
+
+Important Types: 
+The map and reduce functiosn supplied by the users have associated types: 
+Map --> (k1, v1) ----> list(k2, v2)
+Reduce --> (k2, list(v2)) --> list(v2)
+
+Definitely, our Input KV will be different from the output KVs. So we have to do those conversions. 
