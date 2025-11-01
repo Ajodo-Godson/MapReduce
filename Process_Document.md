@@ -79,3 +79,13 @@ So a more formal justification for the current design is:
 2. The gRPC + Protocol Buffers for RPC and serialization helped provide a compact format. Especially since it allow workers call master RPCs (Register, RequestTask, ReportTaskComplete, SendHearteat) as if local functions. 
 3. I tested the scripts I have locally on my machine by opening multiple terminal and running them. But I decided Docker was a great way to simulate the networked cluster (I think I mentioned this few writeups above) by spinning up multiple container models to separate machines and let the gRPC networking behavior (service-name DNS ports) be exercised. 
 4. Back on the Master state model: We're storing the task state (pending/running/completed), assigned worker, timestamps and attempt counts which might be helpful later in the scheduler I'm yet to finalize on. 
+5. Heartbeat-based failure detection and task reassignments: This was one of the things that I thought would be easy to do but somehow it proved challenging. Or to be specific, threading and concurrency was a pain for me. Instead of concurrent operations to help with reassigning tasks when a worker failed(not sending heartbeats), it identifies the failure but doesn't reassign tasks. A fix I made to that was to call the function outside the lock. Somehow it worked, but I don't know why (I'll figure this out later). reassign_worker_tasks resets non-completed tasks to pending so other workers can pick them up. This implements the fault-tolerance behaviour described in the paper. I have a big confusion from the paper: 
+"""
+Any map tasks completed by the worker are reset back to their initial idle state, and therefore become eligible for scheduling on other workers. Similarly, any map task or reduce
+task in progress on a failed worker is also reset to idle
+and becomes eligible for rescheduling.
+Completed map tasks are re-executed on a failure because their output is stored on the local disk(s) of the failed machine and is therefore inaccessible. Completed reduce tasks do not need to be re-executed since their output is stored in a global file system
+"""
+According to the quote above, even completed tasks are to be reset to their initial idle state. The reason was the storage on the local disk(s) of the failed machine. I still don't fully understand the logic but as the tasks are completed, the feedback are sent back to the master/leader, including the result of the tasks executed. Does resetting to idle depends on the period between completing a task and the feedback sent to the master? 
+So I decided to reset only running tasks from a failed worker by changing it to pending. 
+6. The monitoring part: The display was mostly done by AI but the core logic was a collaboration. 
