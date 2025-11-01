@@ -1,0 +1,65 @@
+version: '3.8'
+
+services:
+  master:
+    build: .
+    container_name: mapreduce_master
+    command: python -m src.master.server
+    ports:
+      - "50051:50051"
+    networks:
+      - mapreduce_net
+    environment:
+      - PYTHONUNBUFFERED=1
+    volumes:
+      - ./src:/app/src
+      - ./protos:/app/protos
+
+  worker1:
+    build: .
+    container_name: mapreduce_worker1
+    command: python -m src.worker.client worker1
+    depends_on:
+      - master
+    networks:
+      - mapreduce_net
+    environment:
+      - PYTHONUNBUFFERED=1
+      - MASTER_ADDRESS=master:50051
+    volumes:
+      - ./src:/app/src
+      - ./protos:/app/protos
+
+  worker2:
+    build: .
+    container_name: mapreduce_worker2
+    command: python3 -m src.worker.client worker2
+    depends_on:
+      - master
+    networks:
+      - mapreduce_net
+    environment:
+      - PYTHONUNBUFFERED=1
+      - MASTER_ADDRESS=master:50051
+    volumes:
+      - ./src:/app/src
+      - ./protos:/app/protos
+
+  worker3:
+    build: .
+    container_name: mapreduce_worker3
+    command: python3 -m src.worker.client worker3
+    depends_on:
+      - master
+    networks:
+      - mapreduce_net
+    environment:
+      - PYTHONUNBUFFERED=1
+      - MASTER_ADDRESS=master:50051
+    volumes:
+      - ./src:/app/src
+      - ./protos:/app/protos
+
+networks:
+  mapreduce_net:
+    driver: bridge
