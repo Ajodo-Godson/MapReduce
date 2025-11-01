@@ -72,81 +72,10 @@ The Methods we have include:
 - send_heartbeat
 - send request_task
 
+Rough draft: I don't know what I was thinking here exactly but my initial approach to this was based on having the reducer and mapper scripts working, but I changed the plan to follow the milestone I'd defined earlier. 
 
-## Worker State — thinking & justification
-
-I want the worker state to be minimal, observable, and easy to reset on failure. Workers are ephemeral in my environment (containers or processes can die), so the state lives mostly in memory and is reported often to the master. Keep the state surface small to reduce synchronization complexity and failure modes.
-
-Contract (what the worker state provides):
-- Inputs: assigned TaskDescriptor (map or reduce), local execution status and health metrics.
-- Outputs: periodic heartbeats and task status updates (started, progress, completed, failed), plus locations of any produced intermediate files.
-- Error modes: worker can lose local files on crash; master must be prepared to re-run tasks or fetch shards from alternate places.
-
-Core fields (where they live: `src/worker/client.py`, `src/worker/executor.py`):
-- `worker_id` — stable identifier for a worker process instance.
-- `running` / `alive` — boolean; used for test harness and clean shutdown.
-- `current_task` — the TaskDescriptor currently executing (or `None`). Keep this shallow (id, type, input-split ref, output location hint).
-- `task_state` — Enum: Idle, Running, Completed, Failed. This is local view; master is authoritative.
-- `progress` — optional numeric progress (0-100) or simple phase markers (mapping, shuffling, reducing).
-- `intermediate_locations` — list of (file_path, offset_range) for map outputs that the worker produced. Reported to master immediately on completion.
-- `fail_after` / `debug_flags` — dev/test only: used to simulate failures for resilience testing.
-
-Why these choices (design notes):
-- Minimal local state: avoid complex, durable local metadata. If the worker dies, re-running is simpler than trying to recover partial state.
-- Report intermediate locations, not raw data: avoids pumping large payloads through RPCs; the master and other workers can fetch files via the filesystem/HTTP when needed.
-- Master-as-source-of-truth: the worker keeps a local view for speed, but every important transition is reported; this keeps reasoning about scheduling simpler.
-- Keep health and progress simple: we don't need fine-grained progress for correctness, just enough to detect stuck tasks and trigger retries.
-
-Edge cases / failure handling:
-- Crash during map: intermediate files may be partially written — treat as non-existent and re-run the map task elsewhere.
-- Network partition: worker continues local work but can't contact master. It should retry heartbeats with exponential backoff and mark tasks as paused if master remains unreachable for a long time.
-- Disk-full on write: return an explicit failure to master with an error code so the scheduler knows to reschedule or mark the worker unhealthy.
-
-Example (how the worker reports completion):
-- On map completion, worker writes intermediate files locally, then sends ReportTaskResult containing `task_id`, `status=COMPLETED`, and `intermediate_locations=[(path, start, size), ...]`.
-- Master acknowledges and records the locations (but the master may still treat the map as "not durable" until reducers read them or until replication is added).
-
-Trade-offs considered:
-- Durable replication vs simplicity: I prefer simplicity for now (no replication of intermediate files). That means master may re-run tasks on failure but the overall system is simpler to build and reason about.
-- Push vs pull of intermediate data: pushing large data over RPCs simplifies the master but hurts scalability. I prefer pull (workers expose file locations) to keep RPC payloads small.
-
-
-## Master State — thinking & justification
-
-The master must be authoritative and durable (to the level implemented). Its state is the key source of truth for scheduling and recovery. Because I want to be able to checkpoint and restart the master (and because the master must make global decisions), state design must balance completeness and ease of checkpointing.
-
-Contract (what the master state provides):
-- Inputs: worker registrations, heartbeats, task results, user job submissions.
-- Outputs: task assignments, reassignments on failure, global job progress, persistent checkpoints (optional).
-- Error modes: master process crash — must be able to restart from the last checkpoint or re-derive a safe state (idempotency matters).
-
-Core fields (where they live: `src/master/state.py`, used by `src/master/scheduler.py` and `src/master/server.py`):
-- `jobs` — map of job_id -> JobMetadata (job definition, user map/reduce functions, input splits, requested R).
-- `map_tasks` / `reduce_tasks` — tables keyed by task_id describing: state (Idle, In-Progress, Completed), assigned_worker (if any), intermediate locations (for maps), retries count, timestamps (start, last_update).
-- `workers` — worker table keyed by worker_id with last_heartbeat, health_state, capability hints (available slots, resources), address/location.
-- `intermediate_index` — mapping from map_task -> list(intermediate_locations) so reducers can find inputs. This is critical for shuffle.
-- `checkpoints` / `log` — optional write-ahead or checkpoint snapshot to allow recovery after master crash. Even simple periodic pickling is useful here.
-
-Why these choices (design notes):
-- Master must be authoritative: even if workers report local state, decisions come from the master; that centralization simplifies correctness reasoning.
-- Keep task records small but sufficient: we store locations (not content) for intermediate outputs. This keeps the master memory-light while still enabling shuffle.
-- Track retries and timestamps: this enables failure detection and re-scheduling policies (e.g., exponential backoff, max retries).
-- Checkpointing: I prefer periodic snapshots of `state.py` to disk. That is easier than building a full consensus system (Raft) early on and covers many common failure modes.
-
-Failure handling and invariants:
-- Worker failure: master marks worker as failed if heartbeats expire, then moves any in-progress tasks back to Idle and increments retry counters. Completed map tasks produced only on the failed worker are treated as lost (unless we added replication).
-- Master restart: on restart from checkpoint, master must reconcile worker liveness (workers will re-register or heartbeats will repopulate the table). Any tasks marked In-Progress with stale timestamps should be reverted to Idle after a timeout.
-- Idempotency: task re-execution must be safe (map/reduce functions should be treated as idempotent or the framework must handle duplicate outputs). This affects how reducers merge partial outputs.
-
-Edge cases / trade-offs:
-- Single-master simplicity vs HA complexity: starting with a single master is simple; adding leader election/replicated state (Raft) is a later improvement. The checkpoint approach gives a reasonable middle ground for development.
-- Metadata scale: the master stores only metadata (task tables, locations). If the job metadata grows very large, we may need to shard or externalize the metadata store.
-
-Quick notes on implementation points:
-- When recording intermediate_locations, record both the file path and a checksum or size to detect partial writes.
-- Use monotonically increasing `task_attempt_id` for retries so that stale worker reports can be ignored when a task was already reassigned.
-- When master notices repeated failures on a worker, add it to a quarantine list and reduce scheduling to it until admin intervention.
-
-
-*** End Patch
-
+So a more formal justification for the current design is: 
+1. The abstraction from the paper alone wasn't enough to come up with a perfect design but I kep the same MapReduce concepts like map/shuffle/reduce, task lifecycle in mind, while leveraging python for faster iteration and thank goodness for gRPC/protos that I discovered above. 
+2. The gRPC + Protocol Buffers for RPC and serialization helped provide a compact format. Especially since it allow workers call master RPCs (Register, RequestTask, ReportTaskComplete, SendHearteat) as if local functions. 
+3. I tested the scripts I have locally on my machine by opening multiple terminal and running them. But I decided Docker was a great way to simulate the networked cluster (I think I mentioned this few writeups above) by spinning up multiple container models to separate machines and let the gRPC networking behavior (service-name DNS ports) be exercised. 
+4. Back on the Master state model: We're storing the task state (pending/running/completed), assigned worker, timestamps and attempt counts which might be helpful later in the scheduler I'm yet to finalize on. 
