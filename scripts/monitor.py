@@ -33,37 +33,56 @@ class ClusterMonitor:
             )
             
             logs = result.stdout
+
+            # Build fresh worker map for this parse to avoid acumulation
+            local_workers = {}
             
             # Parse worker registrations
             worker_pattern = r'Worker registered: (\w+)'
             for match in re.finditer(worker_pattern, logs):
                 worker_id = match.group(1)
-                if worker_id not in self.workers:
-                    self.workers[worker_id] = {'status': 'registered', 'tasks': 0, 'failed': False}
+                local_workers[worker_id] = {'status': 'registered', 'tasks': 0, 'failed': False}
+                
+            # if worker_id not in self.workers:
+            #     self.workers[worker_id] = {'status': 'registered', 'tasks': 0, 'failed': False}
             
             # Parse worker failures
             failure_pattern = r'Worker (\w+) marked as FAILED'
             for match in re.finditer(failure_pattern, logs):
                 worker_id = match.group(1)
-                if worker_id in self.workers:
-                    self.workers[worker_id]['status'] = 'FAILED'
-                    self.workers[worker_id]['failed'] = True
+                if worker_id not in local_workers:
+                    local_workers[worker_id] = {'status': 'FAILED', 'tasks': 0, 'failed': True}
+                else:
+                    local_workers[worker_id]['status'] = 'FAILED'
+                    local_workers[worker_id]['failed'] = True
+                # if worker_id in self.workers:
+                #     self.workers[worker_id]['status'] = 'FAILED'
+                #     self.workers[worker_id]['failed'] = True
             
             # Parse task completions
             complete_pattern = r'Task (\w+) completed by (\w+)'
             for match in re.finditer(complete_pattern, logs):
                 task_id, worker_id = match.groups()
-                if worker_id in self.workers:
-                    self.workers[worker_id]['tasks'] += 1
+                # if worker_id in self.workers:
+                #     self.workers[worker_id]['tasks'] += 1
+                if worker_id not in local_workers:
+                    local_workers[worker_id] = {'status': 'registered', 'tasks': 1, 'failed': False}
+                local_workers[worker_id]['tasks'] += 1
             
             # Parse status updates (most recent)
             status_pattern = r'(Pending|Running|Completed|Failed): (\d+)'
             status_lines = logs.split('SYSTEM STATUS')[-1] if 'SYSTEM STATUS' in logs else ''
+            overall = {}
             
             for match in re.finditer(status_pattern, status_lines):
                 status_type, count = match.groups()
-                self.tasks['overall'][status_type.lower()] = int(count)
-                
+                overall[status_type.lower()] = int(count)
+            
+            self.tasks['overall'] = overall
+            
+            # Replace persistent worker map with fresh snapshot
+            self.workers = local_workers
+
         except subprocess.TimeoutExpired:
             pass
         except Exception as e:
