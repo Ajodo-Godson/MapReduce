@@ -15,6 +15,7 @@ Definitely, our Input KV will be different from the output KVs. So we have to do
 
 Some examples of ezpressable MapReduce computations: 
 - Disributed Grep: MAP emits a line if it matches a supplied pattern. REDUCE (Identity function)  copies the intermediate data to the output
+
 - Count of URL Access Frequency : MAP processes web page requess log and outputs {URL, 1}. REDUCE adds all values for the same URL and emits {URL, total count} pair. Similar to word count
 - Reverse Web-Link Graph: MAP outputs <target, source> pris for each link to target-URL found in a page named source. REDUCE concatentes the list of all source URLs associated with the given target URL and emits the pair <target, list(source)> 
     and others like: 
@@ -89,3 +90,7 @@ Completed map tasks are re-executed on a failure because their output is stored 
 According to the quote above, even completed tasks are to be reset to their initial idle state. The reason was the storage on the local disk(s) of the failed machine. I still don't fully understand the logic but as the tasks are completed, the feedback are sent back to the master/leader, including the result of the tasks executed. Does resetting to idle depends on the period between completing a task and the feedback sent to the master? 
 So I decided to reset only running tasks from a failed worker by changing it to pending. 
 6. The monitoring part: The display was mostly done by AI but the core logic was a collaboration. 
+7. Forgot to mention this, we have a very small map and reduce operation here. All it does is return the individual maps and reduce is to just output them. 
+
+
+I have more tasks to do....... and I'm not a fan of writing Readmes. Lot of markdown formatting :(

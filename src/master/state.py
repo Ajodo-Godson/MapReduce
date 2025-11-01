@@ -99,6 +99,7 @@ class MasterState:
                     task['completed_at'] = time.time()
                     task['status'] = 'completed'
                     task['output_data'] = output_data
+                    print(f"[{datetime.now()}] Task {task_id} output: {output_data}")
                     if worker_id and worker_id in self.workers:
                         self.workers[worker_id]['tasks_completed'] += 1
                 else: 
