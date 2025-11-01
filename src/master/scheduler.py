@@ -2,8 +2,8 @@ import json
 from datetime import datetime
 
 
-## PS: I will revisit these. 
-## I might consider a toposort design based on time and possible dependencies. 
+## PS: I will revisit these when working on the next milestone
+## I might consider a toposort design based on time and possible dependencies 
 ## Something more rigorous than just the basic FIFO I'm implementing now. 
 
 class TaskScheduler:
