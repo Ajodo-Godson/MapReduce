@@ -20,7 +20,8 @@ class MasterState:
                 'registered_at': time.time(),
                 'last_heartbeat': time.time(),
                 'tasks_completed': 0,
-                'tasks_failed': 0
+                'tasks_failed': 0, 
+                'tasks_assigned': 0
             }
     def update_heartbeat(self, worker_id, status):
         """Updates the heartbeat information for a worker."""
@@ -34,11 +35,13 @@ class MasterState:
         with self.lock:
             if worker_id in self.workers:
                 self.workers[worker_id]['status'] = 'failed'
-                # Reset tasks assigned to this worker including the completed ones
-                for task_id, task in self.tasks.items():
-                    if task['assigned_worker'] == worker_id:
-                        task['status'] = 'idle'
-                        task['assigned_worker'] = None
+                print(f"[{datetime.now()}] ⚠️  Worker {worker_id} marked as failed")
+                # # Reset tasks assigned to this worker including the completed ones
+                # for task_id, task in self.tasks.items():
+                #     if task['assigned_worker'] == worker_id:
+                #         task['status'] = 'idle'
+                #         task['assigned_worker'] = None
+        self.reassign_worker_tasks(worker_id)
                 
     def get_worker(self, worker_id):
         """Retrieves information about a specific worker."""
@@ -139,12 +142,14 @@ class MasterState:
             ]
 
     def reassign_worker_tasks(self, worker_id):
-        """Reassigns all tasks from a failed worker."""
+        """Reassigns tasks from a failed worker."""
         with self.lock:
             reassigned_tasks = []
+            print("This function was called")
 
             for task_id, task in self.tasks.items():
                 if task['assigned_worker'] == worker_id and task['status'] == 'running':
+                #if task['assigned_worker'] == worker_id:
                     task['status'] = 'pending'
                     task['assigned_worker'] = None  
                     reassigned_tasks.append(task_id)
