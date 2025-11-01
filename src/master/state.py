@@ -145,11 +145,11 @@ class MasterState:
         """Reassigns tasks from a failed worker."""
         with self.lock:
             reassigned_tasks = []
-            print("This function was called")
+            #print("This function was called")
 
             for task_id, task in self.tasks.items():
-                if task['assigned_worker'] == worker_id and task['status'] == 'running':
-                #if task['assigned_worker'] == worker_id:
+                #if task['assigned_worker'] == worker_id and task['status'] == 'running':
+                if task['assigned_worker'] == worker_id:
                     task['status'] = 'pending'
                     task['assigned_worker'] = None  
                     reassigned_tasks.append(task_id)

@@ -17,16 +17,22 @@ from .executor import TaskExecutor
 class Worker:
     """Worker node that executes map/reduce tasks"""
     
-    def __init__(self, worker_id, master_address='localhost:50051', fail_after=None):
+    def __init__(self, worker_id, master_address=None, fail_after=None):
         self.worker_id = worker_id
-        self.master_address = master_address
+        env_addr = os.environ.get('MASTER_ADDRESS')
+        if master_address:
+            self.master_address = master_address
+        elif env_addr:
+            self.master_address = env_addr
+        else:
+            self.master_address = 'localhost:50051'
         self.executor = TaskExecutor()
         self.running = True
         self.fail_after = fail_after  # For testing fault tolerance
         self.tasks_completed = 0
         
         # Connect to master
-        self.channel = grpc.insecure_channel(master_address)
+        self.channel = grpc.insecure_channel(self.master_address)
         self.stub = mapreduce_pb2_grpc.MasterServiceStub(self.channel)
         
         print(f"[{datetime.now()}] Worker {worker_id} starting...")
@@ -152,7 +158,7 @@ class Worker:
         print(f"[{datetime.now()}] Worker {self.worker_id} shutting down")
 
 
-def start_worker(worker_id, master_address='localhost:50051', fail_after=None):
+def start_worker(worker_id, master_address=None, fail_after=None):
     """Start a worker process"""
     worker = Worker(worker_id, master_address, fail_after)
     try:
