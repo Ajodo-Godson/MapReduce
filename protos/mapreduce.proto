@@ -8,6 +8,8 @@ service MasterService {
   rpc SendHeartbeat(Heartbeat) returns (HeartbeatResponse);
   rpc RequestTask(TaskRequest) returns (TaskAssignment);
   rpc ReportTaskComplete(TaskResult) returns (TaskAck);
+  rpc ReportIntermediateFiles(IntermediateFileInfo) returns (TaskAck);
+  rpc GetIntermediateLocations(PartitionRequest) returns (IntermediateLocations);
 }
 
 // Worker registration
@@ -20,6 +22,7 @@ message WorkerInfo {
 message RegisterResponse {
   bool success = 1;
   string message = 2;
+  int32 num_reduce_tasks = 3;  // Tell worker how many reduce partitions
 }
 
 // Heartbeat messages
@@ -27,10 +30,12 @@ message Heartbeat {
   string worker_id = 1;
   int64 timestamp = 2;
   string status = 3;  // "idle", "busy"
+  repeated string current_tasks = 4;  // Tasks currently executing
 }
 
 message HeartbeatResponse {
   bool acknowledged = 1;
+  bool should_shutdown = 2;  // Master can tell worker to shutdown
 }
 
 // Task assignment
@@ -41,9 +46,11 @@ message TaskRequest {
 message TaskAssignment {
   string task_id = 1;
   string task_type = 2;  // "map" or "reduce"
-  string input_data = 3;  // For this milestone: simple string data
+  string input_data = 3;  // For map: input split; for reduce: partition key
   int32 partition_id = 4;
-  bool has_task = 5;  // False if no tasks available
+  int32 num_reduce_tasks = 5;  // For map tasks: how many reduce partitions to create
+  bool has_task = 6;  // False if no tasks available
+  int64 task_sequence_number = 7;  // For idempotency checking
 }
 
 message TaskResult {
@@ -52,8 +59,39 @@ message TaskResult {
   bool success = 3;
   string output_data = 4;  // JSON-serialized results
   string error_message = 5;
+  int64 task_sequence_number = 6;  // Echo back sequence number
 }
 
 message TaskAck {
   bool acknowledged = 1;
+  bool is_duplicate = 2;  // True if this task was already completed
+}
+
+// Intermediate file tracking
+message IntermediateFileInfo {
+  string worker_id = 1;
+  string task_id = 2;
+  repeated FileLocation locations = 3;
+}
+
+message FileLocation {
+  int32 partition_id = 1;
+  string file_path = 2;
+  int64 file_size = 3;
+}
+
+message PartitionRequest {
+  int32 partition_id = 1;
+}
+
+message IntermediateLocations {
+  int32 partition_id = 1;
+  repeated WorkerFileLocation locations = 2;
+}
+
+message WorkerFileLocation {
+  string worker_id = 1;
+  string host = 2;
+  int32 port = 3;
+  string file_path = 4;
 }
