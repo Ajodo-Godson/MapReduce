@@ -4,7 +4,7 @@ package mapreduce;
 
 // Master Service - Workers connect to this
 service MasterService {
-  rpc RegisterWorker(WorkerInfo) returns (RegisterResponse);
+  rpc RegisterWorker(WorkerInfo) returns (RegisterResponse); 
   rpc SendHeartbeat(Heartbeat) returns (HeartbeatResponse);
   rpc RequestTask(TaskRequest) returns (TaskAssignment);
   rpc ReportTaskComplete(TaskResult) returns (TaskAck);

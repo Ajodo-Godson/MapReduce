@@ -1,162 +1,191 @@
 import threading
 import time
-from datetime import datetime, timedelta
-
-from typing import Dict, List, Optional
+from datetime import datetime
 
 
 class MasterState:
-    """ Manages the state of workers and tasks"""
+    """Manages the state of workers and tasks with idempotency support"""
+    
     def __init__(self):
-        self.workers = {}  
-        self.tasks = {}
+        self.workers = {}  # worker_id -> worker_info
+        self.tasks = {}    # task_id -> task_info
+        self.task_sequence = 0  # Monotonically increasing sequence number
+        self.completed_sequences = set()  # Track completed task sequences for idempotency
+        self.intermediate_files = {}  # task_id -> {partition_id -> file_location}
         self.lock = threading.Lock()
-
+    
     def add_worker(self, worker_id, worker_info):
-        """Registers a new worker with the master."""
+        """Register a new worker"""
         with self.lock:
             self.workers[worker_id] = {
-                **worker_info, 
+                **worker_info,
                 'registered_at': time.time(),
                 'last_heartbeat': time.time(),
                 'tasks_completed': 0,
-                'tasks_failed': 0, 
-                'tasks_assigned': 0
+                'tasks_failed': 0,
+                'current_tasks': []
             }
-    def update_heartbeat(self, worker_id, status):
-        """Updates the heartbeat information for a worker."""
+    
+    def update_heartbeat(self, worker_id, status, current_tasks=None):
+        """Update worker heartbeat"""
         with self.lock:
             if worker_id in self.workers:
                 self.workers[worker_id]['last_heartbeat'] = time.time()
                 self.workers[worker_id]['status'] = status
+                if current_tasks is not None:
+                    self.workers[worker_id]['current_tasks'] = current_tasks
     
     def mark_worker_failed(self, worker_id):
-        """Marks a worker as failed."""
+        """Mark a worker as failed"""
         with self.lock:
             if worker_id in self.workers:
                 self.workers[worker_id]['status'] = 'failed'
-                print(f"[{datetime.now()}] ⚠️  Worker {worker_id} marked as failed")
-                # # Reset tasks assigned to this worker including the completed ones
-                # for task_id, task in self.tasks.items():
-                #     if task['assigned_worker'] == worker_id:
-                #         task['status'] = 'idle'
-                #         task['assigned_worker'] = None
-        self.reassign_worker_tasks(worker_id)
-                
+                print(f"[{datetime.now()}] Worker {worker_id} marked as FAILED")
+    
     def get_worker(self, worker_id):
-        """Retrieves information about a specific worker."""
-        with self.lock: 
+        """Get worker info"""
+        with self.lock:
             return self.workers.get(worker_id, {}).copy()
-
+    
     def get_all_workers(self):
-        """Retrieves information about all workers."""
-        with self.lock: 
+        """Get all workers"""
+        with self.lock:
             return {
                 wid: {
                     'status': info['status'],
-                    'last_heartbeat': time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(info['last_heartbeat'])),
+                    'last_heartbeat': time.strftime('%H:%M:%S', time.localtime(info['last_heartbeat'])),
                     'tasks_completed': info.get('tasks_completed', 0),
-                    'tasks_failed': info.get('tasks_failed', 0)
+                    'tasks_failed': info.get('tasks_failed', 0),
+                    'current_tasks': info.get('current_tasks', [])
                 }
                 for wid, info in self.workers.items()
             }
-        
-
+    
     def add_task(self, task_id, task_info):
-        """Adds a new task to the master."""
+        """Add a new task"""
         with self.lock:
+            self.task_sequence += 1
             self.tasks[task_id] = {
-                **task_info, 
-                'status': 'pending', # pending, running, completed, failed
+                **task_info,
+                'status': 'pending',  # pending, running, completed, failed
                 'assigned_worker': None,
-                'created_at': time.time(), 
+                'created_at': time.time(),
                 'started_at': None,
                 'completed_at': None,
-                'attempts': 0
+                'attempts': 0,
+                'sequence_number': self.task_sequence
             }
-        
-
+    
     def assign_task(self, task_id, worker_id):
-        """Assigns an idle task to a worker."""
-        with self.lock:
-            if task_id in self.tasks and worker_id in self.workers:
-                task = self.tasks[task_id]
-                if task['status'] == 'pending':
-                    task['assigned_worker'] = worker_id
-                    task['status'] = 'running'
-                    task['started_at'] = time.time()
-                    task['attempts'] += 1
-                    self.workers[worker_id]['tasks_assigned'] += 1 # Consistency in ACID here. If we're assining a task, we should increment the assigned count.
-
-
-    def complete_task(self, task_id, output_data):
-        """Marks a task as complete or failed."""
-        with self.lock: 
-            if task_id in self.tasks:
-                task = self.tasks[task_id]
-                worker_id = task['assigned_worker']
-                if task['status'] == 'running':
-                    task['completed_at'] = time.time()
-                    task['status'] = 'completed'
-                    task['output_data'] = output_data
-                    print(f"[{datetime.now()}] Task {task_id} output: {output_data}")
-                    if worker_id and worker_id in self.workers:
-                        self.workers[worker_id]['tasks_completed'] += 1
-                else: 
-                    # if task was not running, we can thrown an error so that it restarts, but we can enforce that by still marking it as failed
-                    task['completed_at'] = time.time()
-                    task['status'] = 'failed'
-                    if worker_id and worker_id in self.workers:
-                        self.workers[worker_id]['tasks_failed'] += 1
-
-    def fail_task(self, task_id):
-        """Marks a task as failed and reset for retry."""
+        """Assign a task to a worker"""
         with self.lock:
             if task_id in self.tasks:
-                task = self.tasks[task_id]
-                worker_id = task['assigned_worker']
-
+                self.tasks[task_id]['status'] = 'running'
+                self.tasks[task_id]['assigned_worker'] = worker_id
+                self.tasks[task_id]['started_at'] = time.time()
+                self.tasks[task_id]['attempts'] += 1
+                
+                # Add to worker's current tasks
+                if worker_id in self.workers:
+                    self.workers[worker_id]['current_tasks'].append(task_id)
+    
+    def complete_task(self, task_id, sequence_number, output_data):
+        """Mark task as completed (idempotent)"""
+        with self.lock:
+            # Check if we've already completed this sequence number
+            if sequence_number in self.completed_sequences:
+                print(f"[{datetime.now()}] Ignoring duplicate completion for task {task_id} (seq {sequence_number})")
+                return True  # Is duplicate
+            
+            if task_id in self.tasks:
+                self.tasks[task_id]['status'] = 'completed'
+                self.tasks[task_id]['completed_at'] = time.time()
+                self.tasks[task_id]['output_data'] = output_data
+                
+                # Mark sequence as completed
+                self.completed_sequences.add(sequence_number)
+                
                 # Update worker stats
+                worker_id = self.tasks[task_id]['assigned_worker']
+                if worker_id and worker_id in self.workers:
+                    self.workers[worker_id]['tasks_completed'] += 1
+                    # Remove from current tasks
+                    if task_id in self.workers[worker_id]['current_tasks']:
+                        self.workers[worker_id]['current_tasks'].remove(task_id)
+                
+                return False  # Not a duplicate
+    
+    def fail_task(self, task_id):
+        """Mark task as failed and reset for retry"""
+        with self.lock:
+            if task_id in self.tasks:
+                self.tasks[task_id]['status'] = 'failed'
+                
+                # Update worker stats
+                worker_id = self.tasks[task_id]['assigned_worker']
                 if worker_id and worker_id in self.workers:
                     self.workers[worker_id]['tasks_failed'] += 1
-
+                    # Remove from current tasks
+                    if task_id in self.workers[worker_id]['current_tasks']:
+                        self.workers[worker_id]['current_tasks'].remove(task_id)
+                
                 # Reset for potential retry
-                if task['status'] == 'running' and task['attempts'] < 3:  # max 3 attempts
-                    task['status'] = 'pending'
-                    task['assigned_worker'] = None
-
+                if self.tasks[task_id]['attempts'] < 3:  # Max 3 attempts
+                    self.tasks[task_id]['status'] = 'pending'
+                    self.tasks[task_id]['assigned_worker'] = None
+    
     def get_task(self, task_id):
-        """Retrieves information about a specific task."""
+        """Get task info"""
         with self.lock:
             return self.tasks.get(task_id, {}).copy()
-
+    
     def get_all_tasks(self):
-        """Retrieves information about all tasks."""
+        """Get all tasks"""
         with self.lock:
             return self.tasks.copy()
-
+    
     def get_pending_tasks(self):
-        """Retrieves all pending tasks."""
+        """Get all pending tasks"""
         with self.lock:
             return [
-                (tid, task) for tid, task in self.tasks.items() if task['status'] == 'pending'
+                (tid, task) 
+                for tid, task in self.tasks.items() 
+                if task['status'] == 'pending'
             ]
-
+    
     def reassign_worker_tasks(self, worker_id):
-        """Reassigns tasks from a failed worker."""
+        """Reassign tasks from a failed worker"""
         with self.lock:
-            reassigned_tasks = []
-            #print("This function was called")
-
+            reassigned = []
             for task_id, task in self.tasks.items():
-                #if task['assigned_worker'] == worker_id and task['status'] == 'running':
-                if task['assigned_worker'] == worker_id:
+                if task['assigned_worker'] == worker_id and task['status'] == 'running':
                     task['status'] = 'pending'
-                    task['assigned_worker'] = None  
-                    reassigned_tasks.append(task_id)
-                    
-                    self.workers[worker_id]['tasks_assigned'] -= 1
-            if reassigned_tasks:
-                print(f"Reassigned tasks {reassigned_tasks} from failed worker {worker_id}")
-
-            return reassigned_tasks
+                    task['assigned_worker'] = None
+                    reassigned.append(task_id)
+            
+            # Clear worker's current tasks
+            if worker_id in self.workers:
+                self.workers[worker_id]['current_tasks'] = []
+            
+            if reassigned:
+                print(f"[{datetime.now()}] Reassigned {len(reassigned)} tasks from failed worker {worker_id}: {reassigned}")
+            
+            return reassigned
+    
+    def store_intermediate_files(self, task_id, file_locations):
+        """Store intermediate file locations for a completed map task"""
+        with self.lock:
+            self.intermediate_files[task_id] = file_locations
+    
+    def get_intermediate_files_for_partition(self, partition_id):
+        """Get all intermediate file locations for a specific reduce partition"""
+        with self.lock:
+            locations = []
+            for task_id, file_locs in self.intermediate_files.items():
+                if partition_id in file_locs:
+                    locations.append({
+                        'task_id': task_id,
+                        'worker_id': self.tasks[task_id]['assigned_worker'],
+                        'file_path': file_locs[partition_id]
+                    })
+            return locations
