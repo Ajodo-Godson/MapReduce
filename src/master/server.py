@@ -15,22 +15,37 @@ import mapreduce_pb2_grpc
 from .state import MasterState
 from .scheduler import TaskScheduler
 from .monitor import WorkerMonitor
+from .checkpoint import MasterCheckpoint
 
 
 class MasterServicer(mapreduce_pb2_grpc.MasterServiceServicer):
-    def __init__(self):
+    """Master node that coordinates MapReduce job execution.
+    
+    Based on Google MapReduce paper:
+    - Assigns map tasks to workers
+    - Tracks intermediate file locations
+    - Creates reduce tasks after map phase completes
+    - Handles worker failures and task reassignment
+    """
+    
+    def __init__(self, num_reduce_tasks=3):
+        self.num_reduce_tasks = num_reduce_tasks
         self.state = MasterState()
-        self.scheduler = TaskScheduler(self.state)
+        self.scheduler = TaskScheduler(self.state, num_reduce_tasks=num_reduce_tasks)
         self.monitor = WorkerMonitor(self.state)
+        self.checkpoint = MasterCheckpoint()
         
         # Start monitoring thread
         self.monitor_thread = threading.Thread(target=self.monitor.run, daemon=True)
         self.monitor_thread.start()
         
-        print(f"[{datetime.now()}] Master initialized")
+        # Start checkpointing thread
+        self.checkpoint.start_periodic_checkpointing(self.state)
+        
+        print(f"[{datetime.now()}] Master initialized with R={num_reduce_tasks}")
     
     def RegisterWorker(self, request, context):
-        """Register a new worker"""
+        """Register a new worker."""
         worker_id = request.worker_id
         worker_info = {
             'host': request.host,
@@ -44,18 +59,20 @@ class MasterServicer(mapreduce_pb2_grpc.MasterServiceServicer):
         
         return mapreduce_pb2.RegisterResponse(
             success=True,
-            message=f"Worker {worker_id} registered successfully"
+            message=f"Worker {worker_id} registered successfully",
+            num_reduce_tasks=self.num_reduce_tasks
         )
     
     def SendHeartbeat(self, request, context):
-        """Receive heartbeat from worker"""
+        """Receive heartbeat from worker."""
         worker_id = request.worker_id
-        self.state.update_heartbeat(worker_id, request.status)
+        current_tasks = list(request.current_tasks) if request.current_tasks else None
+        self.state.update_heartbeat(worker_id, request.status, current_tasks)
         
         return mapreduce_pb2.HeartbeatResponse(acknowledged=True)
     
     def RequestTask(self, request, context):
-        """Assign a task to a worker"""
+        """Assign a task to a worker."""
         worker_id = request.worker_id
         task = self.scheduler.get_next_task(worker_id)
         
@@ -65,42 +82,100 @@ class MasterServicer(mapreduce_pb2_grpc.MasterServiceServicer):
                 task_type=task['task_type'],
                 input_data=task['input_data'],
                 partition_id=task['partition_id'],
-                has_task=True
+                num_reduce_tasks=task.get('num_reduce_tasks', self.num_reduce_tasks),
+                has_task=True,
+                task_sequence_number=task.get('sequence_number', 0)
             )
         else:
             return mapreduce_pb2.TaskAssignment(has_task=False)
     
     def ReportTaskComplete(self, request, context):
-        """Receive task completion from worker"""
+        """Receive task completion from worker."""
         worker_id = request.worker_id
         task_id = request.task_id
+        sequence_number = request.task_sequence_number
         
         if request.success:
-            self.scheduler.mark_task_complete(
+            is_duplicate = self.scheduler.mark_task_complete(
                 task_id, 
                 worker_id, 
-                request.output_data
+                request.output_data,
+                sequence_number=sequence_number
             )
-            print(f"[{datetime.now()}] Task {task_id} completed by {worker_id}")
+            if is_duplicate:
+                print(f"[{datetime.now()}] Duplicate completion for task {task_id} (ignored)")
+            else:
+                print(f"[{datetime.now()}] Task {task_id} completed by {worker_id}")
+            
+            return mapreduce_pb2.TaskAck(acknowledged=True, is_duplicate=is_duplicate)
         else:
             self.scheduler.mark_task_failed(task_id, worker_id)
             print(f"[{datetime.now()}] Task {task_id} failed on {worker_id}: {request.error_message}")
+            return mapreduce_pb2.TaskAck(acknowledged=True, is_duplicate=False)
+    
+    def ReportIntermediateFiles(self, request, context):
+        """Store intermediate file locations from completed map task.
+        
+        Per Google paper: Master stores locations and sizes of R intermediate
+        file regions produced by each map task. This info is pushed to workers
+        with in-progress reduce tasks.
+        """
+        task_id = request.task_id
+        worker_id = request.worker_id
+        
+        # Convert to dict: {partition_id: file_path}
+        file_locs = {
+            loc.partition_id: loc.file_path 
+            for loc in request.locations
+        }
+        
+        self.state.store_intermediate_files(task_id, file_locs)
+        
+        print(f"[{datetime.now()}] Stored {len(file_locs)} intermediate file locations for {task_id}")
         
         return mapreduce_pb2.TaskAck(acknowledged=True)
     
+    def GetIntermediateLocations(self, request, context):
+        """Return all intermediate file locations for a reduce partition.
+        
+        Called by reduce workers to know where to fetch intermediate data.
+        """
+        partition_id = request.partition_id
+        locations = self.state.get_intermediate_files_for_partition(partition_id)
+        
+        # Build response with worker locations
+        worker_locations = []
+        for loc in locations:
+            worker_info = self.state.get_worker(loc.get('worker_id', ''))
+            worker_locations.append(
+                mapreduce_pb2.WorkerFileLocation(
+                    worker_id=loc.get('worker_id', ''),
+                    host=worker_info.get('host', 'localhost'),
+                    port=worker_info.get('port', 0),
+                    file_path=loc.get('file_path', '')
+                )
+            )
+        
+        return mapreduce_pb2.IntermediateLocations(
+            partition_id=partition_id,
+            locations=worker_locations
+        )
+    
     def get_status(self):
-        """Get current system status for visualization"""
+        """Get current system status for visualization."""
+        progress = self.scheduler.get_job_progress()
         return {
             'workers': self.state.get_all_workers(),
             'tasks': self.state.get_all_tasks(),
+            'progress': progress,
             'timestamp': datetime.now().isoformat()
         }
 
 
-def serve(port=50051, input_data=None):
-    """Start the master server"""
+def serve(port=50051, input_data=None, num_reduce_tasks=3):
+    """Start the master server."""
     server = grpc.server(futures.ThreadPoolExecutor(max_workers=10))
-    servicer = MasterServicer()
+    servicer = MasterServicer(num_reduce_tasks=num_reduce_tasks)
     mapreduce_pb2_grpc.add_MasterServiceServicer_to_server(servicer, server)
     
     server.add_insecure_port(f'[::]:{port}')
@@ -118,17 +193,31 @@ def serve(port=50051, input_data=None):
         while True:
             time.sleep(10)
             status = servicer.get_status()
+            progress = status.get('progress', {})
+            
             print(f"\n{'='*60}")
             print(f"SYSTEM STATUS - {status['timestamp']}")
             print(f"{'='*60}")
             print(f"Workers: {len(status['workers'])} registered")
             for wid, info in status['workers'].items():
-                print(f"  {wid}: {info['status']} (last seen: {info.get('last_heartbeat', 'never')})")
-            print(f"\nTasks:")
-            print(f"  Pending: {sum(1 for t in status['tasks'].values() if t['status'] == 'pending')}")
-            print(f"  Running: {sum(1 for t in status['tasks'].values() if t['status'] == 'running')}")
-            print(f"  Completed: {sum(1 for t in status['tasks'].values() if t['status'] == 'completed')}")
-            print(f"  Failed: {sum(1 for t in status['tasks'].values() if t['status'] == 'failed')}")
+                tasks_str = f", tasks: {info.get('current_tasks', [])}" if info.get('current_tasks') else ""
+                print(f"  {wid}: {info['status']} (last seen: {info.get('last_heartbeat', 'never')}{tasks_str})")
+            
+            print(f"\nMap Phase: {'✅ Complete' if progress.get('map_phase_complete') else '🔄 In Progress'}")
+            print(f"  Total: {progress.get('map_total', 0)} | "
+                  f"Completed: {progress.get('map_completed', 0)} | "
+                  f"Running: {progress.get('map_running', 0)} | "
+                  f"Pending: {progress.get('map_pending', 0)}")
+            
+            print(f"\nReduce Phase:")
+            print(f"  Total: {progress.get('reduce_total', 0)} | "
+                  f"Completed: {progress.get('reduce_completed', 0)} | "
+                  f"Running: {progress.get('reduce_running', 0)} | "
+                  f"Pending: {progress.get('reduce_pending', 0)}")
+            
+            if progress.get('job_complete'):
+                print(f"\n🎉 JOB COMPLETE!")
+            
             print(f"{'='*60}\n")
     
     status_thread = threading.Thread(target=print_status, daemon=True)
@@ -138,6 +227,7 @@ def serve(port=50051, input_data=None):
         server.wait_for_termination()
     except KeyboardInterrupt:
         print(f"\n[{datetime.now()}] Shutting down master server...")
+        servicer.checkpoint.stop()
         server.stop(0)
 
 
@@ -153,4 +243,4 @@ if __name__ == '__main__':
         "worker node failures",
         "task reassignment logic"
     ]
-    serve(input_data=sample_data)
+    serve(input_data=sample_data, num_reduce_tasks=3)

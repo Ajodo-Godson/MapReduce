@@ -1,0 +1,10 @@
+hello world hello mapreduce
+distributed systems are scalable
+mapreduce processes large datasets
+fault tolerance is important for distributed systems
+workers execute map and reduce tasks
+the map phase produces intermediate key value pairs
+the reduce phase aggregates values by key
+parallel processing enables fast computation
+google designed mapreduce for large scale data
+hadoop implements the mapreduce paradigm

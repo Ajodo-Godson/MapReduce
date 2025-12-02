@@ -173,19 +173,38 @@ class MasterState:
             return reassigned
     
     def store_intermediate_files(self, task_id, file_locations):
-        """Store intermediate file locations for a completed map task"""
+        """Store intermediate file locations for a completed map task.
+        
+        Args:
+            task_id: ID of the map task
+            file_locations: dict {partition_id: file_path}
+        """
         with self.lock:
-            self.intermediate_files[task_id] = file_locations
+            # Store locations with reference to which task/worker produced them
+            worker_id = None
+            if task_id in self.tasks:
+                worker_id = self.tasks[task_id].get('assigned_worker')
+            
+            self.intermediate_files[task_id] = {
+                'worker_id': worker_id,
+                'locations': file_locations
+            }
     
     def get_intermediate_files_for_partition(self, partition_id):
-        """Get all intermediate file locations for a specific reduce partition"""
+        """Get all intermediate file locations for a specific reduce partition.
+        
+        Returns list of dicts with file_path, worker_id, task_id for this partition.
+        """
         with self.lock:
             locations = []
-            for task_id, file_locs in self.intermediate_files.items():
+            for task_id, file_info in self.intermediate_files.items():
+                file_locs = file_info.get('locations', {})
+                worker_id = file_info.get('worker_id')
+                
                 if partition_id in file_locs:
                     locations.append({
                         'task_id': task_id,
-                        'worker_id': self.tasks[task_id]['assigned_worker'],
+                        'worker_id': worker_id,
                         'file_path': file_locs[partition_id]
                     })
             return locations
