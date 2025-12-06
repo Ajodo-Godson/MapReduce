@@ -1,5 +1,6 @@
 import json
 from datetime import datetime
+from typing import Optional, Dict, Any, List
 
 
 class TaskScheduler:
@@ -9,9 +10,11 @@ class TaskScheduler:
     - All M map tasks must complete before reduce phase begins
     - R reduce tasks are created after map phase completion
     - Each reduce task processes one partition of intermediate data
+    
+    Can be used standalone or integrated with DAGJobScheduler for multi-job workflows.
     """
     
-    def __init__(self, state, num_reduce_tasks=3):
+    def __init__(self, state, num_reduce_tasks=3, job_id: str = "default"):
         self.state = state
         self.num_reduce_tasks = num_reduce_tasks
         self.task_counter = 0
@@ -19,6 +22,12 @@ class TaskScheduler:
         self.reduce_phase_started = False
         self.total_map_tasks = 0
         self.job_complete_announced = False  # Only announce once
+        
+        # Job identification (for multi-job support)
+        self.job_id = job_id
+        
+        # Callback for when this job completes (used by DAGJobScheduler)
+        self.on_job_complete: Optional[callable] = None
     
     def create_map_tasks(self, input_data):
         """Create map tasks from input data (M splits).
@@ -30,10 +39,12 @@ class TaskScheduler:
             input_data: List of input splits (strings or file paths)
         """
         for i, data in enumerate(input_data):
-            task_id = f"map_{i}"
+            # Include job_id in task_id for multi-job support
+            task_id = f"{self.job_id}_map_{i}" if self.job_id != "default" else f"map_{i}"
             task_info = {
                 'task_type': 'map',
                 'task_id': task_id,
+                'job_id': self.job_id,
                 'input_data': data,
                 'partition_id': i,  # Which split this map processes
                 'num_reduce_tasks': self.num_reduce_tasks  # R value for partitioning
@@ -42,7 +53,7 @@ class TaskScheduler:
             self.task_counter += 1
             self.total_map_tasks += 1
         
-        print(f"[{datetime.now()}] Created {self.total_map_tasks} map tasks, "
+        print(f"[{datetime.now()}] [{self.job_id}] Created {self.total_map_tasks} map tasks, "
               f"will create {self.num_reduce_tasks} reduce tasks after map phase")
     
     def create_reduce_tasks(self):
@@ -56,10 +67,11 @@ class TaskScheduler:
         if self.reduce_phase_started:
             return  # Already created reduce tasks
         
-        print(f"[{datetime.now()}] Map phase complete! Creating {self.num_reduce_tasks} reduce tasks...")
+        print(f"[{datetime.now()}] [{self.job_id}] Map phase complete! Creating {self.num_reduce_tasks} reduce tasks...")
         
         for partition_id in range(self.num_reduce_tasks):
-            task_id = f"reduce_{partition_id}"
+            # Include job_id in task_id for multi-job support
+            task_id = f"{self.job_id}_reduce_{partition_id}" if self.job_id != "default" else f"reduce_{partition_id}"
             
             # Get intermediate file locations for this partition from all completed map tasks
             intermediate_locations = self.state.get_intermediate_files_for_partition(partition_id)
@@ -67,6 +79,7 @@ class TaskScheduler:
             task_info = {
                 'task_type': 'reduce',
                 'task_id': task_id,
+                'job_id': self.job_id,
                 'partition_id': partition_id,
                 'input_data': json.dumps(intermediate_locations),  # Locations to fetch from
                 'num_reduce_tasks': self.num_reduce_tasks
@@ -75,7 +88,7 @@ class TaskScheduler:
             self.task_counter += 1
         
         self.reduce_phase_started = True
-        print(f"[{datetime.now()}] Created {self.num_reduce_tasks} reduce tasks")
+        print(f"[{datetime.now()}] [{self.job_id}] Created {self.num_reduce_tasks} reduce tasks")
     
     def check_map_phase_complete(self):
         """Check if all map tasks are completed and transition to reduce phase."""
@@ -124,8 +137,12 @@ class TaskScheduler:
         if not pending_tasks:
             # Check if job is complete (only announce once)
             if self.check_job_complete() and not self.job_complete_announced:
-                print(f"[{datetime.now()}] 🎉 MapReduce job complete!")
+                print(f"[{datetime.now()}] 🎉 [{self.job_id}] MapReduce job complete!")
                 self.job_complete_announced = True
+                
+                # Notify DAG scheduler if callback is set
+                if self.on_job_complete:
+                    self.on_job_complete(self.job_id)
             return None
         
         # Prioritize map tasks over reduce tasks (shouldn't matter due to phase ordering)
