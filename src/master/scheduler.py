@@ -156,16 +156,22 @@ class TaskScheduler:
     def mark_task_complete(self, task_id, worker_id, output_data, sequence_number=None):
         """Mark a task as completed.
         
+        Handles duplicate completions gracefully:
+        - If worker A was slow and got "failed", task reassigned to B
+        - If A actually completes later, it's detected as duplicate
+        - First completion wins, duplicate is logged but ignored
+        
         Args:
             task_id: ID of completed task
-            worker_id: Worker that completed the task
+            worker_id: Worker that completed the task (important for duplicate detection)
             output_data: Task output (for reduce) or intermediate file locations (for map)
             sequence_number: For idempotency checking
         """
         task = self.state.get_task(task_id)
         seq = sequence_number or task.get('sequence_number', 0)
         
-        is_duplicate = self.state.complete_task(task_id, seq, output_data)
+        # Pass worker_id to complete_task for proper tracking
+        is_duplicate = self.state.complete_task(task_id, seq, output_data, worker_id=worker_id)
         
         if not is_duplicate and task.get('task_type') == 'map':
             # After map task completes, check if we can start reduce phase

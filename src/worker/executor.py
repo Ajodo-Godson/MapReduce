@@ -4,13 +4,15 @@ from collections import defaultdict
 
 # Import framework components
 import sys
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..')
 
-from src.framework.mapper import MapPhase, word_count_map
-from src.framework.reducer import ReducePhase, word_count_reduce
-from src.framework.shuffler import ShufflePhase
-from src.utils.partitioner import Partitioner
-from src.worker.intermediate import IntermediateFileManager
+from 
+
+from utils.partitioner import Partitioner
+from framework.mapper import MapPhase
+from framework.shuffler import ShufflePhase
+from framework.reducer import ReducePhase
+
 
 
 class TaskExecutor:

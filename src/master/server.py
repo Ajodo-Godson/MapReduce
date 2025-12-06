@@ -172,7 +172,7 @@ class MasterServicer(mapreduce_pb2_grpc.MasterServiceServicer):
         }
 
 
-def serve(port=50051, input_data=None, num_reduce_tasks=3):
+def serve(port=50051, input_data=None, num_reduce_tasks=3, use_ascii_viz=True):
     """Start the master server."""
     server = grpc.server(futures.ThreadPoolExecutor(max_workers=10))
     servicer = MasterServicer(num_reduce_tasks=num_reduce_tasks)
@@ -190,35 +190,47 @@ def serve(port=50051, input_data=None, num_reduce_tasks=3):
     
     # Status visualization thread
     def print_status():
+        job_complete_announced = False
         while True:
             time.sleep(10)
-            status = servicer.get_status()
-            progress = status.get('progress', {})
             
-            print(f"\n{'='*60}")
-            print(f"SYSTEM STATUS - {status['timestamp']}")
-            print(f"{'='*60}")
-            print(f"Workers: {len(status['workers'])} registered")
-            for wid, info in status['workers'].items():
-                tasks_str = f", tasks: {info.get('current_tasks', [])}" if info.get('current_tasks') else ""
-                print(f"  {wid}: {info['status']} (last seen: {info.get('last_heartbeat', 'never')}{tasks_str})")
+            if use_ascii_viz:
+                # Use the fancy ASCII visualization
+                print("\n" + servicer.state.get_ascii_visualization())
+            else:
+                # Use simple text status
+                status = servicer.get_status()
+                progress = status.get('progress', {})
+                
+                print(f"\n{'='*60}")
+                print(f"SYSTEM STATUS - {status['timestamp']}")
+                print(f"{'='*60}")
+                print(f"Workers: {len(status['workers'])} registered")
+                for wid, info in status['workers'].items():
+                    tasks_str = f", tasks: {info.get('current_tasks', [])}" if info.get('current_tasks') else ""
+                    print(f"  {wid}: {info['status']} (last seen: {info.get('last_heartbeat', 'never')}{tasks_str})")
+                
+                print(f"\nMap Phase: {'✅ Complete' if progress.get('map_phase_complete') else '🔄 In Progress'}")
+                print(f"  Total: {progress.get('map_total', 0)} | "
+                      f"Completed: {progress.get('map_completed', 0)} | "
+                      f"Running: {progress.get('map_running', 0)} | "
+                      f"Pending: {progress.get('map_pending', 0)}")
+                
+                print(f"\nReduce Phase:")
+                print(f"  Total: {progress.get('reduce_total', 0)} | "
+                      f"Completed: {progress.get('reduce_completed', 0)} | "
+                      f"Running: {progress.get('reduce_running', 0)} | "
+                      f"Pending: {progress.get('reduce_pending', 0)}")
+                
+                print(f"{'='*60}\n")
             
-            print(f"\nMap Phase: {'✅ Complete' if progress.get('map_phase_complete') else '🔄 In Progress'}")
-            print(f"  Total: {progress.get('map_total', 0)} | "
-                  f"Completed: {progress.get('map_completed', 0)} | "
-                  f"Running: {progress.get('map_running', 0)} | "
-                  f"Pending: {progress.get('map_pending', 0)}")
-            
-            print(f"\nReduce Phase:")
-            print(f"  Total: {progress.get('reduce_total', 0)} | "
-                  f"Completed: {progress.get('reduce_completed', 0)} | "
-                  f"Running: {progress.get('reduce_running', 0)} | "
-                  f"Pending: {progress.get('reduce_pending', 0)}")
-            
-            if progress.get('job_complete'):
-                print(f"\n🎉 JOB COMPLETE!")
-            
-            print(f"{'='*60}\n")
+            # Check for job completion (only announce once)
+            progress = servicer.scheduler.get_job_progress()
+            if progress.get('job_complete') and not job_complete_announced:
+                print("\n" + "🎉" * 20)
+                print("       MAPREDUCE JOB COMPLETE!")
+                print("🎉" * 20 + "\n")
+                job_complete_announced = True
     
     status_thread = threading.Thread(target=print_status, daemon=True)
     status_thread.start()

@@ -4,15 +4,41 @@ from datetime import datetime
 
 
 class MasterState:
-    """Manages the state of workers and tasks with idempotency support"""
+    """Manages the state of workers and tasks with idempotency support.
+    
+    Duplicate Job Handling:
+    -----------------------
+    The scenario: Worker A takes task, goes slow, misses heartbeat, gets marked failed.
+    Task is reassigned to Worker B. Now both A and B might complete the same task.
+    
+    Solution: Track task completion by task_id (not just sequence_number).
+    - When a task is already 'completed', ignore subsequent completions
+    - First completion wins, later completions are logged but ignored
+    - This is safe because map/reduce operations are idempotent by design:
+      * Same input always produces same output
+      * Writing same intermediate file twice = same result
+      * Reduce output is deterministic
+    """
     
     def __init__(self):
         self.workers = {}  # worker_id -> worker_info
         self.tasks = {}    # task_id -> task_info
         self.task_sequence = 0  # Monotonically increasing sequence number
-        self.completed_sequences = set()  # Track completed task sequences for idempotency
+        self.completed_task_ids = set()  # Track completed tasks for idempotency
         self.intermediate_files = {}  # task_id -> {partition_id -> file_location}
+        self.task_history = []  # For visualization: list of (timestamp, event, details)
         self.lock = threading.Lock()
+    
+    def _log_event(self, event_type, details):
+        """Log an event for visualization."""
+        self.task_history.append({
+            'timestamp': time.time(),
+            'event': event_type,
+            'details': details
+        })
+        # Keep only last 100 events
+        if len(self.task_history) > 100:
+            self.task_history = self.task_history[-100:]
     
     def add_worker(self, worker_id, worker_info):
         """Register a new worker"""
@@ -23,8 +49,10 @@ class MasterState:
                 'last_heartbeat': time.time(),
                 'tasks_completed': 0,
                 'tasks_failed': 0,
-                'current_tasks': []
+                'current_tasks': [],
+                'task_history': []  # Track what tasks this worker has done
             }
+            self._log_event('worker_registered', {'worker_id': worker_id})
     
     def update_heartbeat(self, worker_id, status, current_tasks=None):
         """Update worker heartbeat"""
@@ -40,6 +68,7 @@ class MasterState:
         with self.lock:
             if worker_id in self.workers:
                 self.workers[worker_id]['status'] = 'failed'
+                self._log_event('worker_failed', {'worker_id': worker_id})
                 print(f"[{datetime.now()}] Worker {worker_id} marked as FAILED")
     
     def get_worker(self, worker_id):
@@ -54,9 +83,11 @@ class MasterState:
                 wid: {
                     'status': info['status'],
                     'last_heartbeat': time.strftime('%H:%M:%S', time.localtime(info['last_heartbeat'])),
+                    'last_heartbeat_raw': info['last_heartbeat'],
                     'tasks_completed': info.get('tasks_completed', 0),
                     'tasks_failed': info.get('tasks_failed', 0),
-                    'current_tasks': info.get('current_tasks', [])
+                    'current_tasks': info.get('current_tasks', []),
+                    'registered_at': info.get('registered_at', 0)
                 }
                 for wid, info in self.workers.items()
             }
@@ -73,13 +104,20 @@ class MasterState:
                 'started_at': None,
                 'completed_at': None,
                 'attempts': 0,
-                'sequence_number': self.task_sequence
+                'sequence_number': self.task_sequence,
+                'completion_worker': None,  # Who actually completed it (for duplicate tracking)
+                'duplicate_completions': []  # Track any duplicate completions
             }
+            self._log_event('task_created', {'task_id': task_id, 'task_type': task_info.get('task_type')})
     
     def assign_task(self, task_id, worker_id):
         """Assign a task to a worker"""
         with self.lock:
             if task_id in self.tasks:
+                # Don't reassign if already completed
+                if self.tasks[task_id]['status'] == 'completed':
+                    return False
+                
                 self.tasks[task_id]['status'] = 'running'
                 self.tasks[task_id]['assigned_worker'] = worker_id
                 self.tasks[task_id]['started_at'] = time.time()
@@ -88,30 +126,72 @@ class MasterState:
                 # Add to worker's current tasks
                 if worker_id in self.workers:
                     self.workers[worker_id]['current_tasks'].append(task_id)
+                
+                self._log_event('task_assigned', {
+                    'task_id': task_id, 
+                    'worker_id': worker_id,
+                    'attempt': self.tasks[task_id]['attempts']
+                })
+                return True
+        return False
     
-    def complete_task(self, task_id, sequence_number, output_data):
-        """Mark task as completed (idempotent)"""
+    def complete_task(self, task_id, sequence_number, output_data, worker_id=None):
+        """Mark task as completed (idempotent).
+        
+        Handles the duplicate completion scenario:
+        - If task already completed, log as duplicate but don't error
+        - First completion wins
+        - Duplicate completions are recorded for debugging/monitoring
+        
+        Returns: True if this was a duplicate completion, False otherwise
+        """
         with self.lock:
-            # Check if we've already completed this sequence number
-            if sequence_number in self.completed_sequences:
-                print(f"[{datetime.now()}] Ignoring duplicate completion for task {task_id} (seq {sequence_number})")
+            # Check if task already completed (primary idempotency check)
+            if task_id in self.completed_task_ids:
+                # This is a duplicate completion - log it but don't fail
+                if task_id in self.tasks:
+                    self.tasks[task_id]['duplicate_completions'].append({
+                        'worker_id': worker_id,
+                        'timestamp': time.time(),
+                        'sequence_number': sequence_number
+                    })
+                self._log_event('duplicate_completion', {
+                    'task_id': task_id,
+                    'worker_id': worker_id,
+                    'original_worker': self.tasks.get(task_id, {}).get('completion_worker')
+                })
+                print(f"[{datetime.now()}] ⚠️  DUPLICATE completion for task {task_id} "
+                      f"from worker {worker_id} (already completed by "
+                      f"{self.tasks.get(task_id, {}).get('completion_worker')})")
                 return True  # Is duplicate
             
             if task_id in self.tasks:
                 self.tasks[task_id]['status'] = 'completed'
                 self.tasks[task_id]['completed_at'] = time.time()
                 self.tasks[task_id]['output_data'] = output_data
+                self.tasks[task_id]['completion_worker'] = worker_id or self.tasks[task_id]['assigned_worker']
                 
-                # Mark sequence as completed
-                self.completed_sequences.add(sequence_number)
+                # Mark task as completed (idempotency tracking)
+                self.completed_task_ids.add(task_id)
                 
-                # Update worker stats
-                worker_id = self.tasks[task_id]['assigned_worker']
-                if worker_id and worker_id in self.workers:
-                    self.workers[worker_id]['tasks_completed'] += 1
+                # Update worker stats - credit the worker who actually completed it
+                completing_worker = worker_id or self.tasks[task_id]['assigned_worker']
+                if completing_worker and completing_worker in self.workers:
+                    self.workers[completing_worker]['tasks_completed'] += 1
+                    self.workers[completing_worker]['task_history'].append({
+                        'task_id': task_id,
+                        'action': 'completed',
+                        'timestamp': time.time()
+                    })
                     # Remove from current tasks
-                    if task_id in self.workers[worker_id]['current_tasks']:
-                        self.workers[worker_id]['current_tasks'].remove(task_id)
+                    if task_id in self.workers[completing_worker]['current_tasks']:
+                        self.workers[completing_worker]['current_tasks'].remove(task_id)
+                
+                self._log_event('task_completed', {
+                    'task_id': task_id,
+                    'worker_id': completing_worker,
+                    'task_type': self.tasks[task_id].get('task_type')
+                })
                 
                 return False  # Not a duplicate
     
@@ -119,10 +199,9 @@ class MasterState:
         """Mark task as failed and reset for retry"""
         with self.lock:
             if task_id in self.tasks:
-                self.tasks[task_id]['status'] = 'failed'
+                worker_id = self.tasks[task_id]['assigned_worker']
                 
                 # Update worker stats
-                worker_id = self.tasks[task_id]['assigned_worker']
                 if worker_id and worker_id in self.workers:
                     self.workers[worker_id]['tasks_failed'] += 1
                     # Remove from current tasks
@@ -133,6 +212,16 @@ class MasterState:
                 if self.tasks[task_id]['attempts'] < 3:  # Max 3 attempts
                     self.tasks[task_id]['status'] = 'pending'
                     self.tasks[task_id]['assigned_worker'] = None
+                    self._log_event('task_retry', {
+                        'task_id': task_id,
+                        'attempt': self.tasks[task_id]['attempts']
+                    })
+                else:
+                    self.tasks[task_id]['status'] = 'failed'
+                    self._log_event('task_failed_permanently', {
+                        'task_id': task_id,
+                        'attempts': self.tasks[task_id]['attempts']
+                    })
     
     def get_task(self, task_id):
         """Get task info"""
@@ -154,14 +243,27 @@ class MasterState:
             ]
     
     def reassign_worker_tasks(self, worker_id):
-        """Reassign tasks from a failed worker"""
+        """Reassign tasks from a failed worker.
+        
+        Note: We only reassign RUNNING tasks, not completed ones.
+        If the "failed" worker actually completes its task later,
+        the duplicate completion will be detected and ignored.
+        """
         with self.lock:
             reassigned = []
             for task_id, task in self.tasks.items():
-                if task['assigned_worker'] == worker_id and task['status'] == 'running':
+                # Only reassign running tasks (not already completed)
+                if (task['assigned_worker'] == worker_id and 
+                    task['status'] == 'running' and
+                    task_id not in self.completed_task_ids):
                     task['status'] = 'pending'
                     task['assigned_worker'] = None
                     reassigned.append(task_id)
+                    self._log_event('task_reassigned', {
+                        'task_id': task_id,
+                        'from_worker': worker_id,
+                        'reason': 'worker_failed'
+                    })
             
             # Clear worker's current tasks
             if worker_id in self.workers:
@@ -208,3 +310,142 @@ class MasterState:
                         'file_path': file_locs[partition_id]
                     })
             return locations
+    
+    # ==================== VISUALIZATION METHODS ====================
+    
+    def get_system_visualization(self):
+        """Get complete system state for visualization.
+        
+        Returns a structured view of:
+        - Worker states and their current work
+        - Task states grouped by phase (map/reduce)
+        - Recent events timeline
+        - Job progress metrics
+        """
+        with self.lock:
+            current_time = time.time()
+            
+            # Worker visualization
+            workers_viz = {}
+            for wid, info in self.workers.items():
+                time_since_hb = current_time - info['last_heartbeat']
+                workers_viz[wid] = {
+                    'status': info['status'],
+                    'status_icon': self._get_status_icon(info['status']),
+                    'current_tasks': info.get('current_tasks', []),
+                    'tasks_completed': info.get('tasks_completed', 0),
+                    'tasks_failed': info.get('tasks_failed', 0),
+                    'last_heartbeat_ago': f"{time_since_hb:.1f}s ago",
+                    'healthy': time_since_hb < 10 and info['status'] != 'failed'
+                }
+            
+            # Task visualization by phase
+            map_tasks = {'pending': [], 'running': [], 'completed': [], 'failed': []}
+            reduce_tasks = {'pending': [], 'running': [], 'completed': [], 'failed': []}
+            
+            for tid, task in self.tasks.items():
+                task_viz = {
+                    'task_id': tid,
+                    'worker': task.get('assigned_worker') or task.get('completion_worker'),
+                    'attempts': task.get('attempts', 0),
+                    'has_duplicates': len(task.get('duplicate_completions', [])) > 0
+                }
+                
+                if task['task_type'] == 'map':
+                    map_tasks[task['status']].append(task_viz)
+                else:
+                    reduce_tasks[task['status']].append(task_viz)
+            
+            # Calculate progress
+            total_map = sum(len(v) for v in map_tasks.values())
+            total_reduce = sum(len(v) for v in reduce_tasks.values())
+            
+            return {
+                'workers': workers_viz,
+                'map_tasks': map_tasks,
+                'reduce_tasks': reduce_tasks,
+                'progress': {
+                    'map_progress': len(map_tasks['completed']) / total_map * 100 if total_map > 0 else 0,
+                    'reduce_progress': len(reduce_tasks['completed']) / total_reduce * 100 if total_reduce > 0 else 0,
+                    'overall': (len(map_tasks['completed']) + len(reduce_tasks['completed'])) / 
+                              (total_map + total_reduce) * 100 if (total_map + total_reduce) > 0 else 0
+                },
+                'recent_events': self.task_history[-10:],  # Last 10 events
+                'duplicate_count': sum(
+                    len(t.get('duplicate_completions', [])) 
+                    for t in self.tasks.values()
+                )
+            }
+    
+    def _get_status_icon(self, status):
+        """Get emoji icon for status."""
+        icons = {
+            'idle': '😴',
+            'busy': '⚙️',
+            'failed': '💀',
+            'pending': '⏳',
+            'running': '🔄',
+            'completed': '✅'
+        }
+        return icons.get(status, '❓')
+    
+    def get_ascii_visualization(self):
+        """Generate ASCII art visualization of system state."""
+        viz = self.get_system_visualization()
+        lines = []
+        
+        # Header
+        lines.append("╔" + "═" * 70 + "╗")
+        lines.append("║" + "MAPREDUCE SYSTEM STATE".center(70) + "║")
+        lines.append("╠" + "═" * 70 + "╣")
+        
+        # Workers section
+        lines.append("║ WORKERS:".ljust(71) + "║")
+        for wid, info in viz['workers'].items():
+            health = "🟢" if info['healthy'] else "🔴"
+            task_str = f"[{', '.join(info['current_tasks'])}]" if info['current_tasks'] else "[idle]"
+            line = f"  {health} {wid}: {info['status_icon']} {info['status']} {task_str}"
+            lines.append("║" + line.ljust(70) + "║")
+        
+        lines.append("╠" + "═" * 70 + "╣")
+        
+        # Map phase
+        map_t = viz['map_tasks']
+        lines.append("║ MAP PHASE:".ljust(71) + "║")
+        progress_bar = self._make_progress_bar(viz['progress']['map_progress'], 40)
+        lines.append("║" + f"  {progress_bar} {viz['progress']['map_progress']:.0f}%".ljust(70) + "║")
+        lines.append("║" + f"  ⏳ Pending: {len(map_t['pending'])} | 🔄 Running: {len(map_t['running'])} | ✅ Done: {len(map_t['completed'])}".ljust(70) + "║")
+        
+        lines.append("╠" + "═" * 70 + "╣")
+        
+        # Reduce phase
+        red_t = viz['reduce_tasks']
+        lines.append("║ REDUCE PHASE:".ljust(71) + "║")
+        progress_bar = self._make_progress_bar(viz['progress']['reduce_progress'], 40)
+        lines.append("║" + f"  {progress_bar} {viz['progress']['reduce_progress']:.0f}%".ljust(70) + "║")
+        lines.append("║" + f"  ⏳ Pending: {len(red_t['pending'])} | 🔄 Running: {len(red_t['running'])} | ✅ Done: {len(red_t['completed'])}".ljust(70) + "║")
+        
+        # Duplicate warnings
+        if viz['duplicate_count'] > 0:
+            lines.append("╠" + "═" * 70 + "╣")
+            lines.append("║" + f" ⚠️  Duplicate completions detected: {viz['duplicate_count']}".ljust(70) + "║")
+        
+        # Recent events
+        lines.append("╠" + "═" * 70 + "╣")
+        lines.append("║ RECENT EVENTS:".ljust(71) + "║")
+        for event in viz['recent_events'][-5:]:
+            ts = time.strftime('%H:%M:%S', time.localtime(event['timestamp']))
+            evt_line = f"  [{ts}] {event['event']}: {event['details']}"
+            if len(evt_line) > 68:
+                evt_line = evt_line[:65] + "..."
+            lines.append("║" + evt_line.ljust(70) + "║")
+        
+        lines.append("╚" + "═" * 70 + "╝")
+        
+        return "\n".join(lines)
+    
+    def _make_progress_bar(self, percentage, width):
+        """Create ASCII progress bar."""
+        filled = int(width * percentage / 100)
+        empty = width - filled
+        return f"[{'█' * filled}{'░' * empty}]"
