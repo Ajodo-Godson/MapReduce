@@ -240,6 +240,9 @@ class Worker:
         # Main task loop
         print(f"[{datetime.now()}] Worker {self.worker_id} ready for tasks")
         
+        consecutive_idle = 0
+        max_idle_cycles = 15  # Exit after ~30 seconds of no tasks (15 * 2s)
+        
         while self.running:
             # Check if we should simulate failure
             if self.fail_after and self.tasks_completed >= self.fail_after:
@@ -251,12 +254,17 @@ class Worker:
             task = self.request_task()
             
             if task:
+                consecutive_idle = 0  # Reset idle counter
                 self.execute_task(task)
             else:
-                # No tasks available, wait
+                consecutive_idle += 1
+                if consecutive_idle >= max_idle_cycles:
+                    print(f"[{datetime.now()}] Worker {self.worker_id}: No tasks for 30s. Job appears complete. Exiting.")
+                    break
+                # Wait quietly without spamming
                 time.sleep(2)
         
-        print(f"[{datetime.now()}] Worker {self.worker_id} shutting down")
+        print(f"[{datetime.now()}] Worker {self.worker_id} shutting down. Completed {self.tasks_completed} tasks.")
 
 
 def start_worker(worker_id, master_address=None, fail_after=None):
