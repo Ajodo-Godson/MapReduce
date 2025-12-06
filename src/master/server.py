@@ -250,16 +250,59 @@ def serve(port=50051, input_data=None, num_reduce_tasks=3, use_ascii_viz=True):
         server.stop(0)
 
 
-if __name__ == '__main__':
+def load_input_data(file_path, chunk_size=None):
+    """Load and split input file into chunks for map tasks.
     
-    sample_data = [
-        "hello world hello",
-        "world of mapreduce",
-        "hello distributed systems",
-        "mapreduce framework design",
-        "distributed computing concepts",
-        "fault tolerance mechanisms",
-        "worker node failures",
-        "task reassignment logic"
-    ]
-    serve(input_data=sample_data, num_reduce_tasks=3)
+    Args:
+        file_path: Path to the input file
+        chunk_size: Number of lines per chunk (None = one line per chunk)
+    
+    Returns:
+        List of text chunks, each becoming one map task
+    """
+    import os
+    
+    if not os.path.exists(file_path):
+        print(f"Warning: File {file_path} not found")
+        return []
+    
+    with open(file_path, 'r') as f:
+        lines = [line.strip() for line in f if line.strip()]
+    
+    if chunk_size is None or chunk_size <= 1:
+        # One line per map task
+        return lines
+    
+    # Group lines into chunks
+    chunks = []
+    for i in range(0, len(lines), chunk_size):
+        chunk = '\n'.join(lines[i:i + chunk_size])
+        chunks.append(chunk)
+    
+    return chunks
+
+
+if __name__ == '__main__':
+    import argparse
+    
+    parser = argparse.ArgumentParser(description='MapReduce Master Server')
+    parser.add_argument('--input', '-i', type=str, default='data/input/sample.txt',
+                        help='Input file path')
+    parser.add_argument('--reduce-tasks', '-r', type=int, default=3,
+                        help='Number of reduce tasks (R)')
+    parser.add_argument('--chunk-size', '-c', type=int, default=1,
+                        help='Lines per map task chunk')
+    parser.add_argument('--port', '-p', type=int, default=50051,
+                        help='Server port')
+    
+    args = parser.parse_args()
+    
+    # Load and split input data
+    input_data = load_input_data(args.input, chunk_size=args.chunk_size)
+    
+    if input_data:
+        print(f"[{datetime.now()}] Loaded {len(input_data)} input chunks from {args.input}")
+    else:
+        print(f"[{datetime.now()}] No input data - workers will wait for tasks")
+    
+    serve(port=args.port, input_data=input_data, num_reduce_tasks=args.reduce_tasks)
