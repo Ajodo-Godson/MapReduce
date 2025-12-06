@@ -13,7 +13,7 @@ _sym_db = _symbol_database.Default()
 
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x0fmapreduce.proto\x12\tmapreduce\";\n\nWorkerInfo\x12\x11\n\tworker_id\x18\x01 \x01(\t\x12\x0c\n\x04host\x18\x02 \x01(\t\x12\x0c\n\x04port\x18\x03 \x01(\x05\"N\n\x10RegisterResponse\x12\x0f\n\x07success\x18\x01 \x01(\x08\x12\x0f\n\x07message\x18\x02 \x01(\t\x12\x18\n\x10num_reduce_tasks\x18\x03 \x01(\x05\"X\n\tHeartbeat\x12\x11\n\tworker_id\x18\x01 \x01(\t\x12\x11\n\ttimestamp\x18\x02 \x01(\x03\x12\x0e\n\x06status\x18\x03 \x01(\t\x12\x15\n\rcurrent_tasks\x18\x04 \x03(\t\"5\n\x0cHeartbeatAck\x12\x14\n\x0c\x61\x63knowledged\x18\x01 \x01(\x08\x12\x0f\n\x07message\x18\x02 \x01(\t\" \n\x0bTaskRequest\x12\x11\n\tworker_id\x18\x01 \x01(\t\"\xa8\x01\n\x0eTaskAssignment\x12\x10\n\x08has_task\x18\x01 \x01(\x08\x12\x0f\n\x07task_id\x18\x02 \x01(\t\x12\x11\n\ttask_type\x18\x03 \x01(\t\x12\x12\n\ninput_data\x18\x04 \x01(\t\x12\x14\n\x0cpartition_id\x18\x05 \x01(\x05\x12\x18\n\x10num_reduce_tasks\x18\x06 \x01(\x05\x12\x1c\n\x14task_sequence_number\x18\x07 \x01(\x03\"\x8b\x01\n\nTaskResult\x12\x11\n\tworker_id\x18\x01 \x01(\t\x12\x0f\n\x07task_id\x18\x02 \x01(\t\x12\x0f\n\x07success\x18\x03 \x01(\x08\x12\x13\n\x0boutput_data\x18\x04 \x01(\t\x12\x15\n\rerror_message\x18\x05 \x01(\t\x12\x1c\n\x14task_sequence_number\x18\x06 \x01(\x03\"0\n\x07TaskAck\x12\x14\n\x0c\x61\x63knowledged\x18\x01 \x01(\x08\x12\x0f\n\x07message\x18\x02 \x01(\t\"f\n\x14IntermediateFileInfo\x12\x11\n\tworker_id\x18\x01 \x01(\t\x12\x0f\n\x07task_id\x18\x02 \x01(\t\x12*\n\tlocations\x18\x03 \x03(\x0b\x32\x17.mapreduce.FileLocation\"J\n\x0c\x46ileLocation\x12\x14\n\x0cpartition_id\x18\x01 \x01(\x05\x12\x11\n\tfile_path\x18\x02 \x01(\t\x12\x11\n\tfile_size\x18\x03 \x01(\x03\"(\n\x10PartitionRequest\x12\x14\n\x0cpartition_id\x18\x01 \x01(\x05\"_\n\x15IntermediateLocations\x12\x14\n\x0cpartition_id\x18\x01 \x01(\x05\x12\x30\n\x05\x66iles\x18\x02 \x03(\x0b\x32!.mapreduce.IntermediateFileDetail\"{\n\x16IntermediateFileDetail\x12\x11\n\tworker_id\x18\x01 \x01(\t\x12\x13\n\x0bworker_host\x18\x02 \x01(\t\x12\x13\n\x0bworker_port\x18\x03 \x01(\x05\x12\x11\n\tfile_path\x18\x04 \x01(\t\x12\x11\n\tfile_size\x18\x05 \x01(\x03\x32\xc3\x03\n\rMasterService\x12\x44\n\x0eRegisterWorker\x12\x15.mapreduce.WorkerInfo\x1a\x1b.mapreduce.RegisterResponse\x12>\n\rSendHeartbeat\x12\x14.mapreduce.Heartbeat\x1a\x17.mapreduce.HeartbeatAck\x12@\n\x0bRequestTask\x12\x16.mapreduce.TaskRequest\x1a\x19.mapreduce.TaskAssignment\x12?\n\x12ReportTaskComplete\x12\x15.mapreduce.TaskResult\x1a\x12.mapreduce.TaskAck\x12N\n\x17ReportIntermediateFiles\x12\x1f.mapreduce.IntermediateFileInfo\x1a\x12.mapreduce.TaskAck\x12Y\n\x18GetIntermediateLocations\x12\x1b.mapreduce.PartitionRequest\x1a .mapreduce.IntermediateLocationsb\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x0fmapreduce.proto\x12\tmapreduce\";\n\nWorkerInfo\x12\x11\n\tworker_id\x18\x01 \x01(\t\x12\x0c\n\x04host\x18\x02 \x01(\t\x12\x0c\n\x04port\x18\x03 \x01(\x05\"N\n\x10RegisterResponse\x12\x0f\n\x07success\x18\x01 \x01(\x08\x12\x0f\n\x07message\x18\x02 \x01(\t\x12\x18\n\x10num_reduce_tasks\x18\x03 \x01(\x05\"X\n\tHeartbeat\x12\x11\n\tworker_id\x18\x01 \x01(\t\x12\x11\n\ttimestamp\x18\x02 \x01(\x03\x12\x0e\n\x06status\x18\x03 \x01(\t\x12\x15\n\rcurrent_tasks\x18\x04 \x03(\t\"5\n\x0cHeartbeatAck\x12\x14\n\x0c\x61\x63knowledged\x18\x01 \x01(\x08\x12\x0f\n\x07message\x18\x02 \x01(\t\" \n\x0bTaskRequest\x12\x11\n\tworker_id\x18\x01 \x01(\t\"\xa8\x01\n\x0eTaskAssignment\x12\x10\n\x08has_task\x18\x01 \x01(\x08\x12\x0f\n\x07task_id\x18\x02 \x01(\t\x12\x11\n\ttask_type\x18\x03 \x01(\t\x12\x12\n\ninput_data\x18\x04 \x01(\t\x12\x14\n\x0cpartition_id\x18\x05 \x01(\x05\x12\x18\n\x10num_reduce_tasks\x18\x06 \x01(\x05\x12\x1c\n\x14task_sequence_number\x18\x07 \x01(\x03\"\x8b\x01\n\nTaskResult\x12\x11\n\tworker_id\x18\x01 \x01(\t\x12\x0f\n\x07task_id\x18\x02 \x01(\t\x12\x0f\n\x07success\x18\x03 \x01(\x08\x12\x13\n\x0boutput_data\x18\x04 \x01(\t\x12\x15\n\rerror_message\x18\x05 \x01(\t\x12\x1c\n\x14task_sequence_number\x18\x06 \x01(\x03\"F\n\x07TaskAck\x12\x14\n\x0c\x61\x63knowledged\x18\x01 \x01(\x08\x12\x0f\n\x07message\x18\x02 \x01(\t\x12\x14\n\x0cis_duplicate\x18\x03 \x01(\x08\"f\n\x14IntermediateFileInfo\x12\x11\n\tworker_id\x18\x01 \x01(\t\x12\x0f\n\x07task_id\x18\x02 \x01(\t\x12*\n\tlocations\x18\x03 \x03(\x0b\x32\x17.mapreduce.FileLocation\"J\n\x0c\x46ileLocation\x12\x14\n\x0cpartition_id\x18\x01 \x01(\x05\x12\x11\n\tfile_path\x18\x02 \x01(\t\x12\x11\n\tfile_size\x18\x03 \x01(\x03\"(\n\x10PartitionRequest\x12\x14\n\x0cpartition_id\x18\x01 \x01(\x05\"_\n\x15IntermediateLocations\x12\x14\n\x0cpartition_id\x18\x01 \x01(\x05\x12\x30\n\x05\x66iles\x18\x02 \x03(\x0b\x32!.mapreduce.IntermediateFileDetail\"{\n\x16IntermediateFileDetail\x12\x11\n\tworker_id\x18\x01 \x01(\t\x12\x13\n\x0bworker_host\x18\x02 \x01(\t\x12\x13\n\x0bworker_port\x18\x03 \x01(\x05\x12\x11\n\tfile_path\x18\x04 \x01(\t\x12\x11\n\tfile_size\x18\x05 \x01(\x03\x32\xc3\x03\n\rMasterService\x12\x44\n\x0eRegisterWorker\x12\x15.mapreduce.WorkerInfo\x1a\x1b.mapreduce.RegisterResponse\x12>\n\rSendHeartbeat\x12\x14.mapreduce.Heartbeat\x1a\x17.mapreduce.HeartbeatAck\x12@\n\x0bRequestTask\x12\x16.mapreduce.TaskRequest\x1a\x19.mapreduce.TaskAssignment\x12?\n\x12ReportTaskComplete\x12\x15.mapreduce.TaskResult\x1a\x12.mapreduce.TaskAck\x12N\n\x17ReportIntermediateFiles\x12\x1f.mapreduce.IntermediateFileInfo\x1a\x12.mapreduce.TaskAck\x12Y\n\x18GetIntermediateLocations\x12\x1b.mapreduce.PartitionRequest\x1a .mapreduce.IntermediateLocationsb\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
@@ -35,17 +35,17 @@ if _descriptor._USE_C_DESCRIPTORS == False:
   _globals['_TASKRESULT']._serialized_start=522
   _globals['_TASKRESULT']._serialized_end=661
   _globals['_TASKACK']._serialized_start=663
-  _globals['_TASKACK']._serialized_end=711
-  _globals['_INTERMEDIATEFILEINFO']._serialized_start=713
-  _globals['_INTERMEDIATEFILEINFO']._serialized_end=815
-  _globals['_FILELOCATION']._serialized_start=817
-  _globals['_FILELOCATION']._serialized_end=891
-  _globals['_PARTITIONREQUEST']._serialized_start=893
-  _globals['_PARTITIONREQUEST']._serialized_end=933
-  _globals['_INTERMEDIATELOCATIONS']._serialized_start=935
-  _globals['_INTERMEDIATELOCATIONS']._serialized_end=1030
-  _globals['_INTERMEDIATEFILEDETAIL']._serialized_start=1032
-  _globals['_INTERMEDIATEFILEDETAIL']._serialized_end=1155
-  _globals['_MASTERSERVICE']._serialized_start=1158
-  _globals['_MASTERSERVICE']._serialized_end=1609
+  _globals['_TASKACK']._serialized_end=733
+  _globals['_INTERMEDIATEFILEINFO']._serialized_start=735
+  _globals['_INTERMEDIATEFILEINFO']._serialized_end=837
+  _globals['_FILELOCATION']._serialized_start=839
+  _globals['_FILELOCATION']._serialized_end=913
+  _globals['_PARTITIONREQUEST']._serialized_start=915
+  _globals['_PARTITIONREQUEST']._serialized_end=955
+  _globals['_INTERMEDIATELOCATIONS']._serialized_start=957
+  _globals['_INTERMEDIATELOCATIONS']._serialized_end=1052
+  _globals['_INTERMEDIATEFILEDETAIL']._serialized_start=1054
+  _globals['_INTERMEDIATEFILEDETAIL']._serialized_end=1177
+  _globals['_MASTERSERVICE']._serialized_start=1180
+  _globals['_MASTERSERVICE']._serialized_end=1631
 # @@protoc_insertion_point(module_scope)
