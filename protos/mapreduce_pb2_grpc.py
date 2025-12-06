@@ -6,7 +6,7 @@ import mapreduce_pb2 as mapreduce__pb2
 
 
 class MasterServiceStub(object):
-    """Master Service - Workers connect to this
+    """Master service for coordinating MapReduce jobs
     """
 
     def __init__(self, channel):
@@ -23,7 +23,7 @@ class MasterServiceStub(object):
         self.SendHeartbeat = channel.unary_unary(
                 '/mapreduce.MasterService/SendHeartbeat',
                 request_serializer=mapreduce__pb2.Heartbeat.SerializeToString,
-                response_deserializer=mapreduce__pb2.HeartbeatResponse.FromString,
+                response_deserializer=mapreduce__pb2.HeartbeatAck.FromString,
                 )
         self.RequestTask = channel.unary_unary(
                 '/mapreduce.MasterService/RequestTask',
@@ -35,14 +35,25 @@ class MasterServiceStub(object):
                 request_serializer=mapreduce__pb2.TaskResult.SerializeToString,
                 response_deserializer=mapreduce__pb2.TaskAck.FromString,
                 )
+        self.ReportIntermediateFiles = channel.unary_unary(
+                '/mapreduce.MasterService/ReportIntermediateFiles',
+                request_serializer=mapreduce__pb2.IntermediateFileInfo.SerializeToString,
+                response_deserializer=mapreduce__pb2.TaskAck.FromString,
+                )
+        self.GetIntermediateLocations = channel.unary_unary(
+                '/mapreduce.MasterService/GetIntermediateLocations',
+                request_serializer=mapreduce__pb2.PartitionRequest.SerializeToString,
+                response_deserializer=mapreduce__pb2.IntermediateLocations.FromString,
+                )
 
 
 class MasterServiceServicer(object):
-    """Master Service - Workers connect to this
+    """Master service for coordinating MapReduce jobs
     """
 
     def RegisterWorker(self, request, context):
-        """Missing associated documentation comment in .proto file."""
+        """Worker registration and heartbeat
+        """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
@@ -54,12 +65,26 @@ class MasterServiceServicer(object):
         raise NotImplementedError('Method not implemented!')
 
     def RequestTask(self, request, context):
-        """Missing associated documentation comment in .proto file."""
+        """Task management
+        """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
     def ReportTaskComplete(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def ReportIntermediateFiles(self, request, context):
+        """Intermediate file management (for shuffle phase)
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def GetIntermediateLocations(self, request, context):
         """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
@@ -76,7 +101,7 @@ def add_MasterServiceServicer_to_server(servicer, server):
             'SendHeartbeat': grpc.unary_unary_rpc_method_handler(
                     servicer.SendHeartbeat,
                     request_deserializer=mapreduce__pb2.Heartbeat.FromString,
-                    response_serializer=mapreduce__pb2.HeartbeatResponse.SerializeToString,
+                    response_serializer=mapreduce__pb2.HeartbeatAck.SerializeToString,
             ),
             'RequestTask': grpc.unary_unary_rpc_method_handler(
                     servicer.RequestTask,
@@ -88,6 +113,16 @@ def add_MasterServiceServicer_to_server(servicer, server):
                     request_deserializer=mapreduce__pb2.TaskResult.FromString,
                     response_serializer=mapreduce__pb2.TaskAck.SerializeToString,
             ),
+            'ReportIntermediateFiles': grpc.unary_unary_rpc_method_handler(
+                    servicer.ReportIntermediateFiles,
+                    request_deserializer=mapreduce__pb2.IntermediateFileInfo.FromString,
+                    response_serializer=mapreduce__pb2.TaskAck.SerializeToString,
+            ),
+            'GetIntermediateLocations': grpc.unary_unary_rpc_method_handler(
+                    servicer.GetIntermediateLocations,
+                    request_deserializer=mapreduce__pb2.PartitionRequest.FromString,
+                    response_serializer=mapreduce__pb2.IntermediateLocations.SerializeToString,
+            ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
             'mapreduce.MasterService', rpc_method_handlers)
@@ -96,7 +131,7 @@ def add_MasterServiceServicer_to_server(servicer, server):
 
  # This class is part of an EXPERIMENTAL API.
 class MasterService(object):
-    """Master Service - Workers connect to this
+    """Master service for coordinating MapReduce jobs
     """
 
     @staticmethod
@@ -129,7 +164,7 @@ class MasterService(object):
             metadata=None):
         return grpc.experimental.unary_unary(request, target, '/mapreduce.MasterService/SendHeartbeat',
             mapreduce__pb2.Heartbeat.SerializeToString,
-            mapreduce__pb2.HeartbeatResponse.FromString,
+            mapreduce__pb2.HeartbeatAck.FromString,
             options, channel_credentials,
             insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
 
@@ -164,5 +199,39 @@ class MasterService(object):
         return grpc.experimental.unary_unary(request, target, '/mapreduce.MasterService/ReportTaskComplete',
             mapreduce__pb2.TaskResult.SerializeToString,
             mapreduce__pb2.TaskAck.FromString,
+            options, channel_credentials,
+            insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
+
+    @staticmethod
+    def ReportIntermediateFiles(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(request, target, '/mapreduce.MasterService/ReportIntermediateFiles',
+            mapreduce__pb2.IntermediateFileInfo.SerializeToString,
+            mapreduce__pb2.TaskAck.FromString,
+            options, channel_credentials,
+            insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
+
+    @staticmethod
+    def GetIntermediateLocations(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(request, target, '/mapreduce.MasterService/GetIntermediateLocations',
+            mapreduce__pb2.PartitionRequest.SerializeToString,
+            mapreduce__pb2.IntermediateLocations.FromString,
             options, channel_credentials,
             insecure, call_credentials, compression, wait_for_ready, timeout, metadata)

@@ -2,96 +2,112 @@ syntax = "proto3";
 
 package mapreduce;
 
-// Master Service - Workers connect to this
+// Master service for coordinating MapReduce jobs
 service MasterService {
-  rpc RegisterWorker(WorkerInfo) returns (RegisterResponse); 
-  rpc SendHeartbeat(Heartbeat) returns (HeartbeatResponse);
-  rpc RequestTask(TaskRequest) returns (TaskAssignment);
-  rpc ReportTaskComplete(TaskResult) returns (TaskAck);
-  rpc ReportIntermediateFiles(IntermediateFileInfo) returns (TaskAck);
-  rpc GetIntermediateLocations(PartitionRequest) returns (IntermediateLocations);
+    // Worker registration and heartbeat
+    rpc RegisterWorker(WorkerInfo) returns (RegisterResponse);
+    rpc SendHeartbeat(Heartbeat) returns (HeartbeatAck);
+    
+    // Task management
+    rpc RequestTask(TaskRequest) returns (TaskAssignment);
+    rpc ReportTaskComplete(TaskResult) returns (TaskAck);
+    
+    // Intermediate file management (for shuffle phase)
+    rpc ReportIntermediateFiles(IntermediateFileInfo) returns (TaskAck);
+    rpc GetIntermediateLocations(PartitionRequest) returns (IntermediateLocations);
 }
 
-// Worker registration
+// Worker information for registration
 message WorkerInfo {
-  string worker_id = 1;
-  string host = 2;
-  int32 port = 3;
+    string worker_id = 1;
+    string host = 2;
+    int32 port = 3;
 }
 
+// Response to worker registration
 message RegisterResponse {
-  bool success = 1;
-  string message = 2;
-  int32 num_reduce_tasks = 3;  // Tell worker how many reduce partitions
+    bool success = 1;
+    string message = 2;
+    int32 num_reduce_tasks = 3;  // Tell worker how many reduce partitions (R)
 }
 
-// Heartbeat messages
+// Heartbeat from worker to master
 message Heartbeat {
-  string worker_id = 1;
-  int64 timestamp = 2;
-  string status = 3;  // "idle", "busy"
-  repeated string current_tasks = 4;  // Tasks currently executing
+    string worker_id = 1;
+    int64 timestamp = 2;
+    string status = 3;  // idle, busy, failed
+    repeated string current_tasks = 4;
 }
 
-message HeartbeatResponse {
-  bool acknowledged = 1;
-  bool should_shutdown = 2;  // Master can tell worker to shutdown
+// Heartbeat acknowledgment
+message HeartbeatAck {
+    bool acknowledged = 1;
+    string message = 2;
 }
 
-// Task assignment
+// Task request from worker
 message TaskRequest {
-  string worker_id = 1;
+    string worker_id = 1;
 }
 
+// Task assignment to worker
 message TaskAssignment {
-  string task_id = 1;
-  string task_type = 2;  // "map" or "reduce"
-  string input_data = 3;  // For map: input split; for reduce: partition key
-  int32 partition_id = 4;
-  int32 num_reduce_tasks = 5;  // For map tasks: how many reduce partitions to create
-  bool has_task = 6;  // False if no tasks available
-  int64 task_sequence_number = 7;  // For idempotency checking
+    bool has_task = 1;
+    string task_id = 2;
+    string task_type = 3;  // map or reduce
+    string input_data = 4;  // For map: input split; For reduce: intermediate file locations
+    int32 partition_id = 5;  // For reduce tasks
+    int32 num_reduce_tasks = 6;  // R value for partitioning
+    int64 task_sequence_number = 7;  // For idempotency
 }
 
+// Task result from worker
 message TaskResult {
-  string worker_id = 1;
-  string task_id = 2;
-  bool success = 3;
-  string output_data = 4;  // JSON-serialized results
-  string error_message = 5;
-  int64 task_sequence_number = 6;  // Echo back sequence number
+    string worker_id = 1;
+    string task_id = 2;
+    bool success = 3;
+    string output_data = 4;
+    string error_message = 5;
+    int64 task_sequence_number = 6;  // For idempotency verification
 }
 
+// Task acknowledgment
 message TaskAck {
-  bool acknowledged = 1;
-  bool is_duplicate = 2;  // True if this task was already completed
+    bool acknowledged = 1;
+    string message = 2;
+    bool is_duplicate = 3;  // Indicates if this was a duplicate completion
 }
 
-// Intermediate file tracking
+// Intermediate file information (reported after map task)
 message IntermediateFileInfo {
-  string worker_id = 1;
-  string task_id = 2;
-  repeated FileLocation locations = 3;
+    string worker_id = 1;
+    string task_id = 2;
+    repeated FileLocation locations = 3;
 }
 
+// Location of an intermediate file
 message FileLocation {
-  int32 partition_id = 1;
-  string file_path = 2;
-  int64 file_size = 3;
+    int32 partition_id = 1;
+    string file_path = 2;
+    int64 file_size = 3;
 }
 
+// Request for intermediate file locations for a partition
 message PartitionRequest {
-  int32 partition_id = 1;
+    int32 partition_id = 1;
 }
 
+// Response with all intermediate file locations for a partition
 message IntermediateLocations {
-  int32 partition_id = 1;
-  repeated WorkerFileLocation locations = 2;
+    int32 partition_id = 1;
+    repeated IntermediateFileDetail files = 2;
 }
 
-message WorkerFileLocation {
-  string worker_id = 1;
-  string host = 2;
-  int32 port = 3;
-  string file_path = 4;
+// Details of an intermediate file
+message IntermediateFileDetail {
+    string worker_id = 1;
+    string worker_host = 2;
+    int32 worker_port = 3;
+    string file_path = 4;
+    int64 file_size = 5;
 }

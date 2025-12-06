@@ -4,22 +4,21 @@ from collections import defaultdict
 
 # Import framework components
 import sys
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..')
-
-from 
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 from utils.partitioner import Partitioner
-from framework.mapper import MapPhase
+from framework.mapper import MapPhase, word_count_map
 from framework.shuffler import ShufflePhase
-from framework.reducer import ReducePhase
-
+from framework.reducer import ReducePhase, word_count_reduce
+from worker.intermediate import IntermediateFileManager
 
 
 class TaskExecutor:
-    """Executes map and reduce tasks using the MapReduce framework.
+    """Executes map and reduce tasks with full partitioning and shuffle support.
     
     Based on Google MapReduce paper:
     - Map tasks: Apply map function, partition output into R intermediate files
+    - Shuffle phase: Fetch and group intermediate data by key
     - Reduce tasks: Fetch intermediate data, shuffle/sort, apply reduce function
     """
     

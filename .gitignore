@@ -1,2 +1,5 @@
 venv/
 docs/
+checkpoints/
+intermediate/
+__pycache__/

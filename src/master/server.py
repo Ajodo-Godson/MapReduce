@@ -64,12 +64,19 @@ class MasterServicer(mapreduce_pb2_grpc.MasterServiceServicer):
         )
     
     def SendHeartbeat(self, request, context):
-        """Receive heartbeat from worker."""
+        """Handle Worker heartbeat."""
         worker_id = request.worker_id
-        current_tasks = list(request.current_tasks) if request.current_tasks else None
-        self.state.update_heartbeat(worker_id, request.status, current_tasks)
+        status = request.status
+
+        with self.state.lock:
+            if worker_id in  self.state.workers:
+                self.state.workers[worker_id]['last_heartbeat'] = time.time()
+                self.state.workers[worker_id]['status'] = status
+                self.state.workers[worker_id]['current_tasks'] = list(request.current_tasks) if request.current_tasks else []
+
         
-        return mapreduce_pb2.HeartbeatResponse(acknowledged=True)
+
+        return mapreduce_pb2.HeartbeatAck(acknowledged=True)
     
     def RequestTask(self, request, context):
         """Assign a task to a worker."""

@@ -270,13 +270,27 @@ def start_worker(worker_id, master_address=None, fail_after=None):
 
 
 if __name__ == '__main__':
-    import sys
+    import argparse
     
-    if len(sys.argv) < 2:
-        print("Usage: python client.py <worker_id> [fail_after_n_tasks]")
-        sys.exit(1)
+    parser = argparse.ArgumentParser(description='MapReduce Worker Node')
+    parser.add_argument('worker_id', nargs='?', default=None,
+                        help='Unique worker identifier (e.g., worker1)')
+    parser.add_argument('--worker-id', dest='worker_id_flag',
+                        help='Unique worker identifier (alternative flag)')
+    parser.add_argument('--master-host', default='localhost',
+                        help='Master hostname (default: localhost)')
+    parser.add_argument('--master-port', type=int, default=50051,
+                        help='Master port (default: 50051)')
+    parser.add_argument('--fail-after', type=int, default=None,
+                        help='Simulate failure after N tasks (for testing)')
     
-    worker_id = sys.argv[1]
-    fail_after = int(sys.argv[2]) if len(sys.argv) > 2 else None
+    args = parser.parse_args()
     
-    start_worker(worker_id, fail_after=fail_after)
+    # Use flag or positional argument for worker_id
+    worker_id = args.worker_id_flag or args.worker_id
+    if not worker_id:
+        parser.error("worker_id is required (positional or --worker-id)")
+    
+    master_address = f"{args.master_host}:{args.master_port}"
+    
+    start_worker(worker_id, master_address=master_address, fail_after=args.fail_after)
