@@ -18,6 +18,7 @@ class TaskScheduler:
         self.map_phase_complete = False
         self.reduce_phase_started = False
         self.total_map_tasks = 0
+        self.job_complete_announced = False  # Only announce once
     
     def create_map_tasks(self, input_data):
         """Create map tasks from input data (M splits).
@@ -121,9 +122,10 @@ class TaskScheduler:
         pending_tasks = self.state.get_pending_tasks()
         
         if not pending_tasks:
-            # Check if job is complete
-            if self.check_job_complete():
+            # Check if job is complete (only announce once)
+            if self.check_job_complete() and not self.job_complete_announced:
                 print(f"[{datetime.now()}] 🎉 MapReduce job complete!")
+                self.job_complete_announced = True
             return None
         
         # Prioritize map tasks over reduce tasks (shouldn't matter due to phase ordering)
