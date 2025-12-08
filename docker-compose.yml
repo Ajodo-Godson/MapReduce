@@ -1,8 +1,14 @@
+# Docker Compose for Normal MapReduce Runs
+# Usage: docker-compose up
+#
+# This is the default configuration for running MapReduce jobs.
+# Uses sample.txt by default. Modify --input for different files.
+
 services:
   master:
     build: .
     container_name: mapreduce_master
-    command: python -m src.master.server
+    command: python3 -m src.master.server --input data/input/sample.txt --chunk-size 100 --reduce-tasks 3
     ports:
       - "50051:50051"
     networks:
@@ -12,11 +18,13 @@ services:
     volumes:
       - ./src:/app/src
       - ./protos:/app/protos
+      - ./data:/app/data
 
   worker1:
     build: .
     container_name: mapreduce_worker1
-    command: python -m src.worker.client worker1
+    command: >
+      sh -c "sleep 3 && python3 -m src.worker.client worker1"
     depends_on:
       - master
     networks:
@@ -27,11 +35,14 @@ services:
     volumes:
       - ./src:/app/src
       - ./protos:/app/protos
+      - ./data:/app/data
+      - ./intermediate:/app/intermediate
 
   worker2:
     build: .
     container_name: mapreduce_worker2
-    command: python3 -m src.worker.client worker2
+    command: >
+      sh -c "sleep 3 && python3 -m src.worker.client worker2"
     depends_on:
       - master
     networks:
@@ -42,11 +53,14 @@ services:
     volumes:
       - ./src:/app/src
       - ./protos:/app/protos
+      - ./data:/app/data
+      - ./intermediate:/app/intermediate
 
   worker3:
     build: .
     container_name: mapreduce_worker3
-    command: python3 -m src.worker.client worker3
+    command: >
+      sh -c "sleep 3 && python3 -m src.worker.client worker3"
     depends_on:
       - master
     networks:
@@ -57,6 +71,8 @@ services:
     volumes:
       - ./src:/app/src
       - ./protos:/app/protos
+      - ./data:/app/data
+      - ./intermediate:/app/intermediate
 
 networks:
   mapreduce_net:
