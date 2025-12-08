@@ -299,6 +299,11 @@ if __name__ == '__main__':
     if not worker_id:
         parser.error("worker_id is required (positional or --worker-id)")
     
-    master_address = f"{args.master_host}:{args.master_port}"
+    # Check environment variable first, then command line args
+    env_master = os.environ.get('MASTER_ADDRESS')
+    if env_master:
+        master_address = env_master
+    else:
+        master_address = f"{args.master_host}:{args.master_port}"
     
     start_worker(worker_id, master_address=master_address, fail_after=args.fail_after)
