@@ -449,3 +449,36 @@ class MasterState:
         filled = int(width * percentage / 100)
         empty = width - filled
         return f"[{'█' * filled}{'░' * empty}]"
+    
+    def reset_for_new_job(self):
+        """Reset state for a new job (used by DAG scheduler)."""
+        with self.lock:
+            self.tasks = {}
+            self.task_sequence = 0
+            self.completed_task_ids = set()
+            self.intermediate_files = {}
+            self.task_history = []
+            # Don't reset workers - they stay connected
+            for wid in self.workers:
+                self.workers[wid]['current_tasks'] = []
+            self._log_event('job_reset', {'message': 'State reset for new job'})
+    
+    def get_reduce_outputs(self):
+        """Get all reduce task outputs combined."""
+        with self.lock:
+            combined_output = {}
+            for task_id, task_info in self.tasks.items():
+                if task_info.get('task_type') == 'reduce' and task_info.get('status') == 'completed':
+                    output_data = task_info.get('output_data')
+                    if output_data:
+                        try:
+                            import json
+                            if isinstance(output_data, str):
+                                data = json.loads(output_data)
+                            else:
+                                data = output_data
+                            if isinstance(data, dict):
+                                combined_output.update(data)
+                        except (json.JSONDecodeError, TypeError):
+                            pass
+            return combined_output
