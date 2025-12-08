@@ -221,3 +221,13 @@ class TaskScheduler:
             'map_phase_complete': self.map_phase_complete,
             'job_complete': self.check_job_complete()
         }
+    
+    def reset_for_new_job(self, job_id: str = None):
+        """Reset scheduler for a new job (used by DAG scheduler)."""
+        self.task_counter = 0
+        self.map_phase_complete = False
+        self.reduce_phase_started = False
+        self.total_map_tasks = 0
+        self.job_complete_announced = False
+        if job_id:
+            self.job_id = job_id
