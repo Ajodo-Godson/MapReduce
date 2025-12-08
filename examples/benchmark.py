@@ -236,9 +236,10 @@ class ClusterBenchmark:
         self.stop_cluster()
         self.start_cluster(workers=3)
         
-        # Start a thread to kill worker2 after 8 seconds
+        # Kill worker2 quickly after start (before job completes)
+        # Workers have 3s sleep, so kill at 4s to catch them mid-job
         import threading
-        kill_thread = threading.Thread(target=self.kill_worker, args=("worker2", 8))
+        kill_thread = threading.Thread(target=self.kill_worker, args=("worker2", 4))
         kill_thread.start()
         
         elapsed = self.wait_for_job_completion(timeout=180)
@@ -270,7 +271,7 @@ class ClusterBenchmark:
         print("#" + " " * 15 + "MAPREDUCE BENCHMARKS" + " " * 23 + "#")
         print("#" * 60)
         print(f"\nStarted at: {datetime.now()}")
-        print(f"Input: data/input/calgary_combined.txt (~1.7MB, 42K lines)")
+        print(f"Input: data/input/big_sample.txt (~6.8MB, 89K lines, 1M words)")
         
         # Check Docker first
         if not self.check_docker():
