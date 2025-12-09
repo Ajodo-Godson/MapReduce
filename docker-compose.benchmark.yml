@@ -1,0 +1,99 @@
+# Docker Compose for Benchmarking
+# Usage: docker-compose -f docker-compose.benchmark.yml up
+#
+# This configuration is optimized for performance benchmarking:
+# - Uses big_sample.txt (1M words) for meaningful timing
+# - Smaller chunk size for more parallelism
+# - Easy to scale workers up/down
+
+services:
+  master:
+    build: .
+    container_name: benchmark_master
+    command: python3 -m src.master.server --input data/input/big_sample.txt --chunk-size 500 --reduce-tasks 3
+    ports:
+      - "50051:50051"
+    networks:
+      - benchmark_net
+    environment:
+      - PYTHONUNBUFFERED=1
+    volumes:
+      - ./src:/app/src
+      - ./protos:/app/protos
+      - ./data:/app/data
+      - ./output:/app/output
+
+  worker1:
+    build: .
+    container_name: benchmark_worker1
+    command: >
+      sh -c "sleep 3 && python3 -m src.worker.client worker1"
+    depends_on:
+      - master
+    networks:
+      - benchmark_net
+    environment:
+      - PYTHONUNBUFFERED=1
+      - MASTER_ADDRESS=master:50051
+    volumes:
+      - ./src:/app/src
+      - ./protos:/app/protos
+      - ./data:/app/data
+      - ./intermediate:/app/intermediate
+
+  worker2:
+    build: .
+    container_name: benchmark_worker2
+    command: >
+      sh -c "sleep 3 && python3 -m src.worker.client worker2"
+    depends_on:
+      - master
+    networks:
+      - benchmark_net
+    environment:
+      - PYTHONUNBUFFERED=1
+      - MASTER_ADDRESS=master:50051
+    volumes:
+      - ./src:/app/src
+      - ./protos:/app/protos
+      - ./data:/app/data
+      - ./intermediate:/app/intermediate
+
+  worker3:
+    build: .
+    container_name: benchmark_worker3
+    command: >
+      sh -c "sleep 3 && python3 -m src.worker.client worker3"
+    depends_on:
+      - master
+    networks:
+      - benchmark_net
+    environment:
+      - PYTHONUNBUFFERED=1
+      - MASTER_ADDRESS=master:50051
+    volumes:
+      - ./src:/app/src
+      - ./protos:/app/protos
+      - ./data:/app/data
+      - ./intermediate:/app/intermediate
+
+  # Web Dashboard for real-time visualization
+  dashboard:
+    build: .
+    container_name: benchmark_dashboard
+    command: python3 -m web.app --master http://master:8080/status
+    ports:
+      - "5000:5000"
+    depends_on:
+      - master
+    networks:
+      - benchmark_net
+    environment:
+      - PYTHONUNBUFFERED=1
+      - MASTER_HTTP_URL=http://master:8080/status
+    volumes:
+      - ./web:/app/web
+
+networks:
+  benchmark_net:
+    driver: bridge
