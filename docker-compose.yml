@@ -11,6 +11,7 @@ services:
     command: python3 -m src.master.server --input data/input/sample.txt --chunk-size 100 --reduce-tasks 3
     ports:
       - "50051:50051"
+      - "8080:8080"
     networks:
       - mapreduce_net
     environment:
@@ -73,6 +74,23 @@ services:
       - ./protos:/app/protos
       - ./data:/app/data
       - ./intermediate:/app/intermediate
+
+  # Web Dashboard for real-time visualization
+  dashboard:
+    build: .
+    container_name: mapreduce_dashboard
+    command: python3 -m web.app --master http://master:8080/status
+    ports:
+      - "5000:5000"
+    depends_on:
+      - master
+    networks:
+      - mapreduce_net
+    environment:
+      - PYTHONUNBUFFERED=1
+      - MASTER_HTTP_URL=http://master:8080/status
+    volumes:
+      - ./web:/app/web
 
 networks:
   mapreduce_net:
