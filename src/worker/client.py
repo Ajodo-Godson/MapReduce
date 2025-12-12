@@ -101,7 +101,7 @@ class Worker:
             except grpc.RpcError as e:
                 print(f"[{datetime.now()}] Heartbeat failed: {e}")
             
-            time.sleep(3)  # Send heartbeat every 3 seconds
+            time.sleep(1)  # Send heartbeat every 1 second for responsive status
     
     def request_task(self):
         """Request a task from master."""
@@ -240,9 +240,6 @@ class Worker:
         # Main task loop
         print(f"[{datetime.now()}] Worker {self.worker_id} ready for tasks")
         
-        consecutive_idle = 0
-        max_idle_cycles = 15  # Exit after ~30 seconds of no tasks (15 * 2s)
-        
         while self.running:
             # Check if we should simulate failure
             if self.fail_after and self.tasks_completed >= self.fail_after:
@@ -254,14 +251,9 @@ class Worker:
             task = self.request_task()
             
             if task:
-                consecutive_idle = 0  # Reset idle counter
                 self.execute_task(task)
             else:
-                consecutive_idle += 1
-                if consecutive_idle >= max_idle_cycles:
-                    print(f"[{datetime.now()}] Worker {self.worker_id}: No tasks for 30s. Job appears complete. Exiting.")
-                    break
-                # Wait quietly without spamming
+                # No task available, stay idle and wait
                 time.sleep(2)
         
         print(f"[{datetime.now()}] Worker {self.worker_id} shutting down. Completed {self.tasks_completed} tasks.")
