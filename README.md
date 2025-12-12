@@ -134,9 +134,6 @@ Notes
 - The dashboard is monitoring-only and does not expose control endpoints.
 - This project is intended for learning and small-scale demos, not production use.
 
-## License
-See the repository root for license information.
-
 ## Troubleshooting
 
 ### Workers not connecting
