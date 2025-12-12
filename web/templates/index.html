@@ -1,0 +1,389 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MapReduce Dashboard</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #0a0a0a;
+            color: #e0e0e0;
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 30px;
+            padding-bottom: 20px;
+            border-bottom: 1px solid #333;
+        }
+        
+        h1 {
+            font-size: 1.8rem;
+            background: linear-gradient(90deg, #00ff88, #00ccff);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        
+        .status-badge {
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-weight: 600;
+            font-size: 0.9rem;
+        }
+        
+        .status-idle { background: #333; color: #888; }
+        .status-running { background: #00ff88; color: #000; animation: pulse 2s infinite; }
+        .status-completed { background: #00ccff; color: #000; }
+        .status-disconnected { background: #ff4444; color: #fff; }
+        
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.7; }
+        }
+        
+        /* Workers Section */
+        .section {
+            background: #1a1a1a;
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+        
+        .section h2 {
+            font-size: 1.1rem;
+            margin-bottom: 15px;
+            color: #888;
+        }
+        
+        .workers-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 15px;
+        }
+        
+        .worker {
+            background: #252525;
+            border-radius: 10px;
+            padding: 15px;
+            border-left: 4px solid #555;
+            transition: all 0.3s;
+        }
+        
+        .worker.idle { border-left-color: #888; }
+        .worker.working { border-left-color: #00ff88; background: #1a2a1a; }
+        .worker.failed { border-left-color: #ff4444; background: #2a1a1a; }
+        
+        .worker-name {
+            font-weight: 600;
+            font-size: 1rem;
+            margin-bottom: 5px;
+        }
+        
+        .worker-status {
+            font-size: 0.85rem;
+            color: #888;
+        }
+        
+        .worker-task {
+            font-size: 0.8rem;
+            color: #00ff88;
+            margin-top: 5px;
+        }
+        
+        /* Progress Section */
+        .progress-container {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+        
+        .progress-box {
+            background: #252525;
+            border-radius: 10px;
+            padding: 20px;
+        }
+        
+        .progress-label {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 10px;
+            font-size: 0.9rem;
+        }
+        
+        .progress-bar {
+            height: 8px;
+            background: #333;
+            border-radius: 4px;
+            overflow: hidden;
+        }
+        
+        .progress-fill {
+            height: 100%;
+            border-radius: 4px;
+            transition: width 0.3s;
+        }
+        
+        .progress-fill.map { background: linear-gradient(90deg, #00ff88, #00cc66); }
+        .progress-fill.reduce { background: linear-gradient(90deg, #00ccff, #0099cc); }
+        
+        /* Stats */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 15px;
+        }
+        
+        .stat {
+            background: #252525;
+            border-radius: 10px;
+            padding: 20px;
+            text-align: center;
+        }
+        
+        .stat-value {
+            font-size: 2rem;
+            font-weight: 700;
+            color: #00ff88;
+        }
+        
+        .stat-label {
+            font-size: 0.8rem;
+            color: #888;
+            margin-top: 5px;
+        }
+        
+        /* Events */
+        .events-log {
+            max-height: 200px;
+            overflow-y: auto;
+            font-family: 'Monaco', 'Menlo', monospace;
+            font-size: 0.8rem;
+        }
+        
+        .event {
+            padding: 8px 0;
+            border-bottom: 1px solid #252525;
+            display: flex;
+            gap: 15px;
+        }
+        
+        .event-time {
+            color: #555;
+            min-width: 80px;
+        }
+        
+        .event-message {
+            color: #aaa;
+        }
+        
+        .last-update {
+            text-align: center;
+            color: #444;
+            font-size: 0.8rem;
+            margin-top: 20px;
+        }
+        
+        .no-workers {
+            color: #555;
+            text-align: center;
+            padding: 40px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🗺️ MapReduce Dashboard</h1>
+            <span id="status-badge" class="status-badge status-idle">Connecting...</span>
+        </header>
+        
+        <!-- Stats -->
+        <div class="section">
+            <div class="stats-grid">
+                <div class="stat">
+                    <div id="stat-workers" class="stat-value">0</div>
+                    <div class="stat-label">Workers</div>
+                </div>
+                <div class="stat">
+                    <div id="stat-tasks" class="stat-value">0</div>
+                    <div class="stat-label">Total Tasks</div>
+                </div>
+                <div class="stat">
+                    <div id="stat-completed" class="stat-value">0</div>
+                    <div class="stat-label">Completed</div>
+                </div>
+                <div class="stat">
+                    <div id="stat-pending" class="stat-value">0</div>
+                    <div class="stat-label">Pending</div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Progress -->
+        <div class="section">
+            <h2>Job Progress</h2>
+            <div class="progress-container">
+                <div class="progress-box">
+                    <div class="progress-label">
+                        <span>Map Phase</span>
+                        <span id="map-text">0 / 0</span>
+                    </div>
+                    <div class="progress-bar">
+                        <div id="map-progress" class="progress-fill map" style="width: 0%"></div>
+                    </div>
+                </div>
+                <div class="progress-box">
+                    <div class="progress-label">
+                        <span>Reduce Phase</span>
+                        <span id="reduce-text">0 / 0</span>
+                    </div>
+                    <div class="progress-bar">
+                        <div id="reduce-progress" class="progress-fill reduce" style="width: 0%"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Workers -->
+        <div class="section">
+            <h2>Worker Nodes</h2>
+            <div id="workers-container" class="workers-grid">
+                <div class="no-workers">No workers connected</div>
+            </div>
+        </div>
+        
+        <!-- Events -->
+        <div class="section">
+            <h2>Recent Events</h2>
+            <div id="events-container" class="events-log">
+                <div class="event">
+                    <span class="event-time">--:--:--</span>
+                    <span class="event-message">Waiting for events...</span>
+                </div>
+            </div>
+        </div>
+        
+        <div id="last-update" class="last-update">Last update: never</div>
+    </div>
+    
+    <script>
+        // Connect to SSE stream
+        const eventSource = new EventSource('/api/stream');
+        
+        eventSource.onmessage = function(event) {
+            const data = JSON.parse(event.data);
+            updateDashboard(data);
+        };
+        
+        eventSource.onerror = function() {
+            document.getElementById('status-badge').textContent = 'Disconnected';
+            document.getElementById('status-badge').className = 'status-badge status-disconnected';
+        };
+        
+        function updateDashboard(data) {
+            // Update status badge
+            const badge = document.getElementById('status-badge');
+            if (!data.connected) {
+                badge.textContent = 'Disconnected';
+                badge.className = 'status-badge status-disconnected';
+            } else {
+                const status = data.status || 'idle';
+                badge.textContent = status.charAt(0).toUpperCase() + status.slice(1);
+                badge.className = 'status-badge status-' + status;
+            }
+            
+            // Update workers
+            const workersContainer = document.getElementById('workers-container');
+            const workers = data.workers || {};
+            const workerIds = Object.keys(workers);
+            
+            if (workerIds.length === 0) {
+                workersContainer.innerHTML = '<div class="no-workers">No workers connected</div>';
+            } else {
+                workersContainer.innerHTML = workerIds.map(id => {
+                    const w = workers[id];
+                    const status = (w.status || 'idle').toLowerCase();
+                    const statusClass = status === 'busy' ? 'working' : status;
+                    const currentTask = w.current_task || '';
+                    
+                    return `
+                        <div class="worker ${statusClass}">
+                            <div class="worker-name">${id}</div>
+                            <div class="worker-status">${status.charAt(0).toUpperCase() + status.slice(1)}</div>
+                            ${currentTask ? `<div class="worker-task">📋 ${currentTask}</div>` : ''}
+                        </div>
+                    `;
+                }).join('');
+            }
+            
+            // Update stats
+            const tasks = data.tasks || {};
+            const map = tasks.map || {};
+            const reduce = tasks.reduce || {};
+            
+            const totalTasks = (map.total || 0) + (reduce.total || 0);
+            const completedTasks = (map.completed || 0) + (reduce.completed || 0);
+            const pendingTasks = (map.pending || 0) + (reduce.pending || 0);
+            
+            document.getElementById('stat-workers').textContent = workerIds.length;
+            document.getElementById('stat-tasks').textContent = totalTasks;
+            document.getElementById('stat-completed').textContent = completedTasks;
+            document.getElementById('stat-pending').textContent = pendingTasks;
+            
+            // Update progress bars
+            const mapTotal = map.total || 0;
+            const mapCompleted = map.completed || 0;
+            const mapPercent = mapTotal > 0 ? (mapCompleted / mapTotal * 100) : 0;
+            
+            const reduceTotal = reduce.total || 0;
+            const reduceCompleted = reduce.completed || 0;
+            const reducePercent = reduceTotal > 0 ? (reduceCompleted / reduceTotal * 100) : 0;
+            
+            document.getElementById('map-progress').style.width = mapPercent + '%';
+            document.getElementById('map-text').textContent = `${mapCompleted} / ${mapTotal}`;
+            
+            document.getElementById('reduce-progress').style.width = reducePercent + '%';
+            document.getElementById('reduce-text').textContent = `${reduceCompleted} / ${reduceTotal}`;
+            
+            // Update events
+            const events = data.events || [];
+            const eventsContainer = document.getElementById('events-container');
+            
+            if (events.length > 0) {
+                eventsContainer.innerHTML = events.slice(-20).reverse().map(e => {
+                    const time = new Date(e.timestamp * 1000).toLocaleTimeString();
+                    const msg = e.event + (e.details ? ': ' + JSON.stringify(e.details) : '');
+                    return `
+                        <div class="event">
+                            <span class="event-time">${time}</span>
+                            <span class="event-message">${msg}</span>
+                        </div>
+                    `;
+                }).join('');
+            }
+            
+            // Update last update time
+            document.getElementById('last-update').textContent = 
+                'Last update: ' + new Date().toLocaleTimeString();
+        }
+        
+        // Initial fetch
+        fetch('/api/status')
+            .then(r => r.json())
+            .then(data => updateDashboard(data))
+            .catch(() => {});
+    </script>
+</body>
+</html>
