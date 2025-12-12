@@ -1,253 +1,141 @@
-# MapReduce Distributed System
-This is an implementation of a mini version of the google's MapReduce Paper: https://static.googleusercontent.com/media/research.google.com/en//archive/mapreduce-osdi04.pdf 
+# MapReduce (learning project)
 
+A minimal MapReduce implementation (master + workers) used for learning and demos. The repo contains a read-only web dashboard for monitoring, gRPC-based master/worker communication, and example scripts for demos and benchmarks.
 
+For a deeper narrative and design notes, see `docs/WRITEUP.md`.
 
-# Milestone 1
+## Quick demo (recommended)
 
-A simplified MapReduce implementation demonstrating distributed processing with fault tolerance and state visualization.
+Prerequisites
+- Docker & Docker Compose
 
-
-1. **Distributed Processing**: Multiple worker nodes process data in parallel
-2. **State Visualization**: Real-time system status display every 10 seconds
-3. **Fault Tolerance**: Automatic detection and recovery from worker failures
-
-## Project Structure
-
-```
-mapreduce-project/
-├── Dockerfile
-├── docker-compose.yml
-├── README.md
-├── requirements.txt
-│
-├── protos/
-│   └── mapreduce.proto          # gRPC service definitions
-│
-├── src/
-│   ├── master/
-│   │   ├── __init__.py
-│   │   ├── server.py            # Master gRPC server
-│   │   ├── state.py             # State management
-│   │   ├── scheduler.py         # Task scheduling
-│   │   └── monitor.py           # Worker health monitoring
-│   │
-│   └── worker/
-│       ├── __init__.py
-│       ├── client.py            # Worker implementation
-│       └── executor.py          # Task execution logic
-│
-└── scripts/
-    ├── generate_proto.sh        # Compile protobuf files
-    └── run_cluster.sh           # Cluster management
-```
-
-## Quick Start
-
-### Prerequisites
-- Docker
-- Docker Compose
-
-### 1. Build and Start the Cluster
+Start the demo (master + 3 workers + dashboard)
 
 ```bash
-chmod +x scripts/*.sh
-./scripts/run_cluster.sh start
+docker-compose -f docker-compose.benchmark.yml up --build
 ```
 
-This starts:
-- 1 Master node (coordinator)
-- 3 Worker nodes (executors)
+Open the dashboard at: http://localhost:5000
 
-### 2. View Real-Time Status
-
-Watch the master node logs to see system status updates:
+Stop the demo
 
 ```bash
-docker-compose logs -f master
+docker-compose -f docker-compose.benchmark.yml down
 ```
 
-You'll see output like:
+## Automated benchmark
 
-```
-============================================================
-SYSTEM STATUS - 2025-10-24T10:30:15
-============================================================
-Workers: 3 registered
-  worker1: busy (last seen: 10:30:12)
-  worker2: idle (last seen: 10:30:11)
-  worker3: busy (last seen: 10:30:13)
-
-Tasks:
-  Pending: 0
-  Running: 2
-  Completed: 1
-  Failed: 0
-============================================================
-```
-
-### 3. Test Fault Tolerance
-
-Kill a worker to see automatic recovery:
+Run automated benchmarks (no dashboard):
 
 ```bash
-./scripts/run_cluster.sh kill-worker worker2
+python3 examples/benchmark.py
 ```
 
-Watch the master logs - you'll see:
-1. Worker marked as FAILED after missing heartbeats
-2. Tasks automatically reassigned to healthy workers
-3. System continues processing
+This runs three tests: 1-worker baseline, 3-worker parallel run, and a failure-recovery test. Results are printed and saved to `benchmark_results.txt`.
 
-### 4. View Individual Worker Logs
+## Project layout (short)
+
+- `protos/` — gRPC `.proto` definitions
+- `src/master/` — master server, scheduler, and state management
+- `src/worker/` — worker client and task executor
+- `web/` — Flask-based read-only dashboard and templates
+- `examples/` — demo and benchmark scripts
+- `docker-compose*.yml` — compose files for demo, benchmark, and DAG runs
+- `docs/WRITEUP.md` — detailed writeup and design notes
+
+## How it works (TL;DR)
+
+1. Master splits the input into map tasks.
+2. Workers register and request tasks from the master via gRPC.
+3. Mappers write partitioned intermediate files (one file per reducer partition).
+4. Reducers fetch intermediate files for their partition (the shuffle) and produce final output.
+5. The master exposes `/status` which the dashboard polls for live updates.
+
+Key points
+- The web dashboard is read-only and monitors the master's `/status` endpoint.
+- There is no master failover implemented (master is a single point of failure).
+- Tasks use sequence numbers and completion tracking to tolerate duplicate reports from slow or restarted workers.
+
+## Development (without Docker)
+
+Install dependencies and generate protobufs
 
 ```bash
-docker-compose logs -f worker1
+pip install -r requirements.txt
+./scripts/generate_proto.sh
 ```
 
-## Testing Scenarios
+Start master
 
-### Scenario 1: Normal Operation
 ```bash
-./scripts/run_cluster.sh start
-docker-compose logs -f master
-# Watch all 3 tasks complete successfully
+python -m src.master.server --input data/input/sample.txt
 ```
 
-### Scenario 2: Worker Failure During Execution
+Start a worker (in another terminal)
+
 ```bash
-./scripts/run_cluster.sh start
-sleep 10  # Let tasks start
-./scripts/run_cluster.sh kill-worker worker2
-docker-compose logs -f master
-# Watch tasks get reassigned and completed
+python -m src.worker.client worker1
 ```
 
-### Scenario 3: Multiple Worker Failures
-```bash
-./scripts/run_cluster.sh start
-sleep 10
-./scripts/run_cluster.sh kill-worker worker1
-sleep 5
-./scripts/run_cluster.sh kill-worker worker3
-docker-compose logs -f master
-# Watch remaining worker complete all tasks
-```
+## Useful commands
 
-## How It Works
+- Demo: `docker-compose -f docker-compose.benchmark.yml up --build`
+- Stop demo: `docker-compose -f docker-compose.benchmark.yml down`
+- Run benchmarks: `python3 examples/benchmark.py`
+- Regenerate protobufs: `./scripts/generate_proto.sh`
 
-### 1. Architecture
+## Simple manual run (no benchmark)
 
-```
-┌─────────────────┐
-│  Master Node    │
-│  - Schedules    │
-│  - Monitors     │
-│  - Coordinates  │
-└────────┬────────┘
-         │
-    ┌────┴────┬────────┬────────┐
-    │         │        │        │
-┌───▼───┐ ┌──▼───┐ ┌──▼───┐ ┌──▼───┐
-│Worker1│ │Worker2│ │Worker3│ │WorkerN│
-│Execute│ │Execute│ │Execute│ │Execute│
-│ Tasks │ │ Tasks │ │ Tasks │ │ Tasks │
-└───────┘ └──────┘ └──────┘ └──────┘
-```
+Follow these steps to run the master and workers manually in separate terminals — useful for demoing and stopping individual workers by closing their terminal.
 
-### 2. Communication Flow
+1. Install dependencies
 
-1. **Registration**: Workers register with master on startup
-2. **Heartbeats**: Workers send heartbeats every 3 seconds
-3. **Task Assignment**: Workers request tasks from master
-4. **Execution**: Workers execute map tasks (word count)
-5. **Reporting**: Workers report results back to master
-
-### 3. Fault Tolerance Mechanism
-
-- **Detection**: Master checks heartbeats every 5 seconds
-- **Timeout**: If no heartbeat for 10 seconds → worker marked FAILED
-- **Recovery**: Failed worker's tasks automatically reassigned
-- **Retry**: Failed tasks retry up to 3 times
-
-### 4. Current Processing Logic
-
-**Simple Word Count Example**:
-- Input: `["hello world", "world of mapreduce"]`
-- Map Task 1: `{"hello": 1, "world": 1}`
-- Map Task 2: `{"world": 1, "of": 1, "mapreduce": 1}`
-
-## Development Commands
-
-### View Logs
-```bash
-# All services
-docker-compose logs -f
-
-# Specific service
-docker-compose logs -f master
-docker-compose logs -f worker1
-```
-
-### Check Status
-```bash
-./scripts/run_cluster.sh status
-```
-
-### Restart Cluster
-```bash
-./scripts/run_cluster.sh restart
-```
-
-### Stop Cluster
-```bash
-./scripts/run_cluster.sh stop
-```
-
-### Rebuild After Code Changes
-```bash
-./scripts/run_cluster.sh rebuild
-```
-
-## Local Development (Without Docker)
-Note: To test task reassignment to workers, you'll need to kill a terminal as early as possible before it assigns all tasks to one worker (it's so fast)
-
-### 1. Install Dependencies
 ```bash
 pip install -r requirements.txt
 ```
 
-### 2. Generate Protobuf Code
+2. Generate Protobuf code
+
 ```bash
 chmod +x scripts/generate_proto.sh
 ./scripts/generate_proto.sh
 ```
 
-### 3. Start Master
+3. Start Master (new terminal)
+
 ```bash
 python -m src.master.server
 ```
 
-### 4. Start Workers (in separate terminals)
+4. Start Workers (each in its own terminal; you can stop any worker by closing that terminal)
+
 ```bash
 python -m src.worker.client worker1
 python -m src.worker.client worker2
 python -m src.worker.client worker3
 ```
 
-### 5. Simulate Worker Failure
-Start a worker that fails after N tasks:
+5. Simulate Worker Failure (unstable worker)
+
+Start a worker that purposely fails after completing N tasks (example below starts one that fails after 2 tasks):
+
 ```bash
 python -m src.worker.client worker_unstable 2
-# This worker will fail after completing 2 tasks
+# This worker will exit/fail after finishing 2 tasks; watch master logs for reassignment
 ```
 
-## Next Steps (Week 8-10)
+Notes
+- Stopping a worker terminal (or killing the process) will simulate a crash and the master will detect failure via heartbeats and reassign tasks.
+- The `examples/benchmark.py` script automates bringing up/down workers for repeatable tests; use the manual steps above for ad-hoc experimentation.
 
-- [ ] Implement reduce phase
-- [ ] Add shuffle logic for intermediate data
-- [ ] Implement partitioning across reduce workers
-- [ ] Support larger datasets from files
+## Notes & limitations
+
+- Master failover is not implemented — the master is a single point of failure.
+- The dashboard is monitoring-only and does not expose control endpoints.
+- This project is intended for learning and small-scale demos, not production use.
+
+## License
+See the repository root for license information.
 
 ## Troubleshooting
 
@@ -281,7 +169,10 @@ docker-compose logs master | grep "registered"
 - **`src/master/server.py`**: Master coordination logic
 - **`src/master/monitor.py`**: Fault detection mechanism
 - **`src/worker/client.py`**: Worker implementation
-- **`docker-compose.yml`**: Multi-container orchestration
+- **`web/app.py`**: Flask web dashboard backend
+- **`web/templates/index.html`**: Dashboard UI
+- **`docker-compose.yml`**: Basic multi-container orchestration
+- **`docker-compose.benchmark.yml`**: Full demo with web dashboard
 
 ## Metrics Tracked
 
