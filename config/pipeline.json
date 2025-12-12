@@ -1,0 +1,27 @@
+{
+  "name": "word_count_pipeline",
+  "description": "Multi-stage word count pipeline demonstrating DAG job chaining",
+  "jobs": [
+    {
+      "id": "word_count",
+      "description": "Count all words in the input file",
+      "input": "data/input/sample.txt",
+      "reduce_tasks": 3,
+      "dependencies": []
+    },
+    {
+      "id": "filter_common",
+      "description": "Filter words that appear more than 5 times",
+      "input": null,
+      "reduce_tasks": 2,
+      "dependencies": ["word_count"]
+    },
+    {
+      "id": "top_words",
+      "description": "Get top 100 most frequent words",
+      "input": null,
+      "reduce_tasks": 1,
+      "dependencies": ["filter_common"]
+    }
+  ]
+}
