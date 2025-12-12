@@ -68,6 +68,7 @@ class ClusterBenchmark:
     def stop_cluster(self):
         """Stop any running cluster."""
         print("  Stopping existing cluster...")
+        self.run_command("docker-compose -f docker-compose.benchmark.yml down 2>/dev/null", timeout=30)
         self.run_command("docker-compose down 2>/dev/null", timeout=30)
         time.sleep(2)
     
@@ -77,11 +78,11 @@ class ClusterBenchmark:
         
         if workers == 1:
             # Only start master and worker1
-            self.run_command("docker-compose up -d master worker1", timeout=60)
+            self.run_command("docker-compose -f docker-compose.benchmark.yml up -d master worker1", timeout=60)
         elif workers == 2:
-            self.run_command("docker-compose up -d master worker1 worker2", timeout=60)
+            self.run_command("docker-compose -f docker-compose.benchmark.yml up -d master worker1 worker2", timeout=60)
         else:
-            self.run_command("docker-compose up -d", timeout=60)
+            self.run_command("docker-compose -f docker-compose.benchmark.yml up -d", timeout=60)
         
         # Wait for services to be ready and workers to register
         time.sleep(8)  # Give time for sleep(3) in workers + registration
@@ -97,7 +98,7 @@ class ClusterBenchmark:
         
         while time.time() - start_time < timeout:
             # Check master logs for completion
-            logs = self.run_command("docker-compose logs master 2>&1", timeout=15)
+            logs = self.run_command("docker-compose -f docker-compose.benchmark.yml logs master 2>&1", timeout=15)
             
             # First wait for workers to register
             if not workers_registered:
@@ -141,7 +142,7 @@ class ClusterBenchmark:
     
     def extract_job_duration_from_logs(self):
         """Extract job duration from log timestamps."""
-        logs = self.run_command("docker-compose logs master 2>&1", timeout=15)
+        logs = self.run_command("docker-compose -f docker-compose.benchmark.yml logs master 2>&1", timeout=15)
         
         # Find first worker registration and last reduce completion
         reg_pattern = r'\[(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d+)\] Worker registered'
@@ -165,12 +166,12 @@ class ClusterBenchmark:
         """Kill a worker after a delay."""
         print(f"  Killing {worker_name} in {delay}s...")
         time.sleep(delay)
-        self.run_command(f"docker-compose kill {worker_name}", timeout=10)
+        self.run_command(f"docker-compose -f docker-compose.benchmark.yml kill {worker_name}", timeout=10)
         print(f"  {worker_name} killed!")
     
     def get_final_logs(self):
         """Get the final state of cluster logs."""
-        return self.run_command("docker-compose logs master 2>&1", timeout=30)
+        return self.run_command("docker-compose -f docker-compose.benchmark.yml logs master 2>&1", timeout=30)
     
     def count_workers_registered(self, logs):
         """Count how many workers registered."""
