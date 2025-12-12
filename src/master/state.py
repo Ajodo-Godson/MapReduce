@@ -233,6 +233,11 @@ class MasterState:
         with self.lock:
             return self.tasks.copy()
     
+    def get_recent_events(self, count=20):
+        """Get recent events for dashboard visualization."""
+        with self.lock:
+            return self.task_history[-count:] if self.task_history else []
+    
     def get_pending_tasks(self):
         """Get all pending tasks"""
         with self.lock:
@@ -403,8 +408,16 @@ class MasterState:
         lines.append("║ WORKERS:".ljust(71) + "║")
         for wid, info in viz['workers'].items():
             health = "🟢" if info['healthy'] else "🔴"
-            task_str = f"[{', '.join(info['current_tasks'])}]" if info['current_tasks'] else "[idle]"
-            line = f"  {health} {wid}: {info['status_icon']} {info['status']} {task_str}"
+            status = info['status']
+            
+            # Only show task info if worker is active (not failed)
+            if status == 'failed':
+                line = f"  {health} {wid}: {info['status_icon']} {status}"
+            elif info['current_tasks']:
+                task_str = f"[{', '.join(info['current_tasks'])}]"
+                line = f"  {health} {wid}: {info['status_icon']} {status} {task_str}"
+            else:
+                line = f"  {health} {wid}: {info['status_icon']} {status}"
             lines.append("║" + line.ljust(70) + "║")
         
         lines.append("╠" + "═" * 70 + "╣")
