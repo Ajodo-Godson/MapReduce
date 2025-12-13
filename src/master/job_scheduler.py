@@ -227,38 +227,45 @@ class DAGJobScheduler:
         Check if adding a job with given dependencies would create a cycle.
         Uses DFS to detect if any dependency can reach back to new_job_id.
         """
-        # For a new job, check if any of its dependencies have it as an ancestor
-        # Since it's new, we need to check if dependencies could point back
-        # This is actually checking if dependencies form a cycle among themselves
-        
-        visited = set()
-        
-        def has_path_to(start: str, target: str) -> bool:
-            """Check if there's a path from start to target through dependents."""
+        # In this scheduler, dependencies are edges: dep -> new_job.
+        # Adding edges dep -> new_job creates a cycle iff there is already
+        # a path new_job -> dep in the existing graph.
+        #
+        # Note: new_job doesn't exist in self.jobs yet when this is called.
+        # However, it *can* still be referenced as a dependency of existing jobs
+        # (i.e., some job already depends on new_job_id). In that case, there may
+        # be existing edges: new_job_id -> ...
+
+        def has_path(start: str, target: str) -> bool:
+            """Return True if there's a path start -> ... -> target via dependents."""
             if start == target:
                 return True
-            if start in visited:
-                return False
-            visited.add(start)
-            
-            if start in self.jobs:
-                for dependent in self.jobs[start].dependents:
-                    if has_path_to(dependent, target):
-                        return True
+
+            visited: set = set()
+            stack = [start]
+
+            while stack:
+                node = stack.pop()
+                if node == target:
+                    return True
+                if node in visited:
+                    continue
+                visited.add(node)
+
+                job = self.jobs.get(node)
+                if not job:
+                    continue
+                # follow edges node -> dependent
+                stack.extend(job.dependents)
+
             return False
-        
-        # Check if any dependency has a path back to create a cycle
+
+        # If new_job can already reach any dep, then dep -> new_job closes a cycle.
         for dep in dependencies:
-            visited.clear()
-            # If dep can reach any other dependency, might be a problem
-            # But the real check is: would dep → new_job → dep create a cycle?
-            # Since new_job doesn't exist yet, we check if adding edges
-            # from dependencies to new_job and from new_job to its dependents
-            # would create a cycle. Since new_job has no dependents yet, 
-            # we just need to ensure dependencies don't have circular refs.
-            pass
-        
-        return False  # Simplified for now
+            if has_path(new_job_id, dep):
+                return True
+
+        return False
     
     def _check_dependencies_met(self, job_id: str) -> bool:
         """Check if all dependencies for a job are completed."""
