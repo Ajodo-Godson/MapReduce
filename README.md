@@ -2,7 +2,7 @@
 
 A minimal MapReduce implementation (master + workers) used for learning and demos. The repo contains a read-only web dashboard for monitoring, gRPC-based master/worker communication, and example scripts for demos and benchmarks.
 
-For a deeper narrative and design notes, see `docs/WRITEUP.md`.
+For a deeper narrative and design notes, see [Published Article](https://dev.to/godson_ajodo_ff4313d88c24/i-built-mapreduce-from-scratch-d8g).
 
 ## Quick demo (recommended)
 
