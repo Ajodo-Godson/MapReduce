@@ -120,7 +120,7 @@ python -m src.worker.client worker3
 Start a worker that purposely fails after completing N tasks (example below starts one that fails after 2 tasks):
 
 ```bash
-python -m src.worker.client worker_unstable 2
+python -m src.worker.client worker_unstable --fail-after 2
 # This worker will exit/fail after finishing 2 tasks; watch master logs for reassignment
 ```
 
