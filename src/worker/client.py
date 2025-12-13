@@ -243,7 +243,7 @@ class Worker:
         while self.running:
             # Check if we should simulate failure
             if self.fail_after and self.tasks_completed >= self.fail_after:
-                print(f"[{datetime.now()}] 💀 Worker {self.worker_id} SIMULATING FAILURE")
+                print(f"[{datetime.now()}] Worker {self.worker_id} SIMULATING FAILURE")
                 print(f"[{datetime.now()}] Worker {self.worker_id} completed {self.tasks_completed} tasks before failing")
                 break
             
