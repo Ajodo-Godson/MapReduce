@@ -506,7 +506,7 @@ def serve(port=50051, input_data=None, num_reduce_tasks=3, use_ascii_viz=True,
                     tasks_str = f", tasks: {info.get('current_tasks', [])}" if info.get('current_tasks') else ""
                     print(f"  {wid}: {info['status']} (last seen: {info.get('last_heartbeat', 'never')}{tasks_str})")
                 
-                print(f"\nMap Phase: {'✅ Complete' if progress.get('map_phase_complete') else '🔄 In Progress'}")
+                print(f"\nMap Phase: {'Complete' if progress.get('map_phase_complete') else 'In Progress'}")
                 print(f"  Total: {progress.get('map_total', 0)} | "
                       f"Completed: {progress.get('map_completed', 0)} | "
                       f"Running: {progress.get('map_running', 0)} | "
@@ -523,9 +523,9 @@ def serve(port=50051, input_data=None, num_reduce_tasks=3, use_ascii_viz=True,
             # Check for job completion (only announce once)
             progress = servicer.scheduler.get_job_progress()
             if progress.get('job_complete') and not job_complete_announced:
-                print("\n" + "🎉" * 20)
-                print("       MAPREDUCE JOB COMPLETE!")
-                print("🎉" * 20 + "\n")
+                print("\n" + "=" * 60)
+                print("MAPREDUCE JOB COMPLETE!")
+                print("=" * 60 + "\n")
                 job_complete_announced = True
     
     status_thread = threading.Thread(target=print_status, daemon=True)

@@ -1,15 +1,9 @@
-"""
-DAG-based Job Scheduler for MapReduce with Task Dependencies.
+"""DAG-based job scheduler for MapReduce with task dependencies.
 
-Supports complex workflows like:
+Supports workflows like:
 - Job A and Job B must complete before Job C starts
 - Multiple MapReduce jobs chained together
-- Automatic dependency resolution using topological sort
-
-Based on concepts from:
-- Google's MapReduce paper (job coordination)
-- Apache Airflow (DAG-based workflows)
-- Apache Oozie (Hadoop job orchestration)
+- Dependency resolution using topological sort
 """
 
 import json
@@ -499,13 +493,13 @@ class DAGJobScheduler:
         lines.append("║                      JOB DEPENDENCY GRAPH                    ║")
         lines.append("╠══════════════════════════════════════════════════════════════╣")
         
-        # Status icons
+        # Status markers
         status_icons = {
-            JobStatus.PENDING: "⏳",
-            JobStatus.READY: "🔵",
-            JobStatus.RUNNING: "🔄",
-            JobStatus.COMPLETED: "✅",
-            JobStatus.FAILED: "❌"
+            JobStatus.PENDING: "PEND",
+            JobStatus.READY: "READY",
+            JobStatus.RUNNING: "RUN",
+            JobStatus.COMPLETED: "DONE",
+            JobStatus.FAILED: "FAIL"
         }
         
         # Get topological order for display
@@ -516,7 +510,7 @@ class DAGJobScheduler:
         
         for job_id in ordered:
             job = self.jobs[job_id]
-            icon = status_icons.get(job.status, "❓")
+            icon = status_icons.get(job.status, "?")
             
             # Show dependencies
             if job.dependencies:
@@ -533,10 +527,10 @@ class DAGJobScheduler:
         # Summary
         status = self.get_status()
         summary = (f"║  Total: {status['total_jobs']} | "
-                   f"✅ {status['completed']} | "
-                   f"🔄 {status['running']} | "
-                   f"⏳ {status['pending']} | "
-                   f"❌ {status['failed']}")
+                   f"DONE {status['completed']} | "
+                   f"RUN {status['running']} | "
+                   f"PEND {status['pending']} | "
+                   f"FAIL {status['failed']}")
         summary = summary.ljust(65) + "║"
         lines.append(summary)
         lines.append("╚══════════════════════════════════════════════════════════════╝")

@@ -160,7 +160,7 @@ class MasterState:
                     'worker_id': worker_id,
                     'original_worker': self.tasks.get(task_id, {}).get('completion_worker')
                 })
-                print(f"[{datetime.now()}] ⚠️  DUPLICATE completion for task {task_id} "
+                print(f"[{datetime.now()}] DUPLICATE completion for task {task_id} "
                       f"from worker {worker_id} (already completed by "
                       f"{self.tasks.get(task_id, {}).get('completion_worker')})")
                 return True  # Is duplicate
@@ -383,16 +383,16 @@ class MasterState:
             }
     
     def _get_status_icon(self, status):
-        """Get emoji icon for status."""
+        """Get a short status marker for visualization."""
         icons = {
-            'idle': '😴',
-            'busy': '⚙️',
-            'failed': '💀',
-            'pending': '⏳',
-            'running': '🔄',
-            'completed': '✅'
+            'idle': 'IDLE',
+            'busy': 'BUSY',
+            'failed': 'FAIL',
+            'pending': 'PEND',
+            'running': 'RUN',
+            'completed': 'DONE'
         }
-        return icons.get(status, '❓')
+        return icons.get(status, '?')
     
     def get_ascii_visualization(self):
         """Generate ASCII art visualization of system state."""
@@ -407,7 +407,7 @@ class MasterState:
         # Workers section
         lines.append("║ WORKERS:".ljust(71) + "║")
         for wid, info in viz['workers'].items():
-            health = "🟢" if info['healthy'] else "🔴"
+            health = "OK" if info['healthy'] else "BAD"
             status = info['status']
             
             # Only show task info if worker is active (not failed)
@@ -427,7 +427,7 @@ class MasterState:
         lines.append("║ MAP PHASE:".ljust(71) + "║")
         progress_bar = self._make_progress_bar(viz['progress']['map_progress'], 40)
         lines.append("║" + f"  {progress_bar} {viz['progress']['map_progress']:.0f}%".ljust(70) + "║")
-        lines.append("║" + f"  ⏳ Pending: {len(map_t['pending'])} | 🔄 Running: {len(map_t['running'])} | ✅ Done: {len(map_t['completed'])}".ljust(70) + "║")
+        lines.append("║" + f"  Pending: {len(map_t['pending'])} | Running: {len(map_t['running'])} | Done: {len(map_t['completed'])}".ljust(70) + "║")
         
         lines.append("╠" + "═" * 70 + "╣")
         
@@ -436,12 +436,12 @@ class MasterState:
         lines.append("║ REDUCE PHASE:".ljust(71) + "║")
         progress_bar = self._make_progress_bar(viz['progress']['reduce_progress'], 40)
         lines.append("║" + f"  {progress_bar} {viz['progress']['reduce_progress']:.0f}%".ljust(70) + "║")
-        lines.append("║" + f"  ⏳ Pending: {len(red_t['pending'])} | 🔄 Running: {len(red_t['running'])} | ✅ Done: {len(red_t['completed'])}".ljust(70) + "║")
+        lines.append("║" + f"  Pending: {len(red_t['pending'])} | Running: {len(red_t['running'])} | Done: {len(red_t['completed'])}".ljust(70) + "║")
         
         # Duplicate warnings
         if viz['duplicate_count'] > 0:
             lines.append("╠" + "═" * 70 + "╣")
-            lines.append("║" + f" ⚠️  Duplicate completions detected: {viz['duplicate_count']}".ljust(70) + "║")
+            lines.append("║" + f" ! Duplicate completions detected: {viz['duplicate_count']}".ljust(70) + "║")
         
         # Recent events
         lines.append("╠" + "═" * 70 + "╣")

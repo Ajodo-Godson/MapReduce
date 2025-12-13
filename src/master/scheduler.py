@@ -105,7 +105,7 @@ class TaskScheduler:
         
         if completed_map_tasks == len(map_tasks):
             self.map_phase_complete = True
-            print(f"[{datetime.now()}] ✅ All {len(map_tasks)} map tasks completed!")
+            print(f"[{datetime.now()}] All {len(map_tasks)} map tasks completed!")
             # Trigger reduce task creation
             self.create_reduce_tasks()
             return True
@@ -137,7 +137,7 @@ class TaskScheduler:
         if not pending_tasks:
             # Check if job is complete (only announce once)
             if self.check_job_complete() and not self.job_complete_announced:
-                print(f"[{datetime.now()}] 🎉 [{self.job_id}] MapReduce job complete!")
+                print(f"[{datetime.now()}] [{self.job_id}] MapReduce job complete!")
                 self.job_complete_announced = True
                 
                 # Notify DAG scheduler if callback is set

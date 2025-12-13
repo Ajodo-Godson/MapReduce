@@ -29,7 +29,7 @@ class WorkerMonitor:
             # Check if worker has timed out
             if time_since_heartbeat > self.heartbeat_timeout:
                 if worker_info['status'] != 'failed':
-                    print(f"[{datetime.now()}] ⚠️  Worker {worker_id} missed heartbeat "
+                    print(f"[{datetime.now()}] Worker {worker_id} missed heartbeat "
                           f"(last seen {time_since_heartbeat:.1f}s ago)")
                     
                     # Mark worker as failed
